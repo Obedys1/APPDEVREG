@@ -1,0 +1,132 @@
+import React, { useState } from 'react';
+import { FilterState } from '../types';
+import { CLIENTES, MOTIVOS, ESTADOS, PRODUTOS, REINCIDENCIA, PERIODOS } from '../data/lists';
+import { Search, Calendar, Filter, X, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+interface FilterPanelProps {
+  filters: FilterState;
+  onFiltersChange: (filters: FilterState) => void;
+  onClearFilters: () => void;
+}
+
+export const FilterPanel: React.FC<FilterPanelProps> = ({
+  filters,
+  onFiltersChange,
+  onClearFilters
+}) => {
+  const [showMore, setShowMore] = useState(false);
+
+  const updateFilter = (key: keyof FilterState, value: string) => {
+    onFiltersChange({ ...filters, [key]: value });
+  };
+
+  const commonInputClass = "w-full bg-brand-surface border border-gray-300/50 rounded-lg py-2 text-sm text-brand-text-base focus:ring-2 focus:ring-brand-secondary focus:border-transparent transition";
+  const commonSelectClass = `${commonInputClass} appearance-none`;
+
+  return (
+    <div className="bg-brand-surface/50 rounded-2xl shadow-md p-6 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div className="relative w-full md:w-auto md:flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar por cliente, produto, motivo..."
+            value={filters.search}
+            onChange={(e) => updateFilter('search', e.target.value)}
+            className={`${commonInputClass} pl-10`}
+          />
+        </div>
+        <div className="relative">
+          <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="date"
+            value={filters.startDate}
+            onChange={(e) => updateFilter('startDate', e.target.value)}
+            className={`${commonInputClass} pl-10`}
+          />
+        </div>
+        <div className="relative">
+          <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="date"
+            value={filters.endDate}
+            onChange={(e) => updateFilter('endDate', e.target.value)}
+            className={`${commonInputClass} pl-10`}
+          />
+        </div>
+        <button
+          onClick={() => setShowMore(!showMore)}
+          className="flex items-center gap-2 px-4 py-2 text-sm text-brand-primary font-medium hover:bg-brand-primary/10 rounded-lg transition-colors"
+        >
+          <Filter className="h-4 w-4" />
+          <span>Mais Filtros</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${showMore ? 'rotate-180' : ''}`} />
+        </button>
+        <button
+          onClick={onClearFilters}
+          className="flex items-center gap-2 px-4 py-2 text-sm text-red-500 font-medium hover:bg-red-500/10 rounded-lg transition-colors"
+        >
+          <X className="h-4 w-4" />
+          Limpar
+        </button>
+      </div>
+      
+      <AnimatePresence>
+        {showMore && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pt-4">
+              <div className="relative">
+                <select value={filters.period} onChange={(e) => updateFilter('period', e.target.value)} className={commonSelectClass}>
+                  <option value="">Período</option>
+                  {PERIODOS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select value={filters.cliente} onChange={(e) => updateFilter('cliente', e.target.value)} className={commonSelectClass}>
+                  <option value="">Cliente</option>
+                  {CLIENTES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select value={filters.produto} onChange={(e) => updateFilter('produto', e.target.value)} className={commonSelectClass}>
+                  <option value="">Produto</option>
+                  {PRODUTOS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select value={filters.motivo} onChange={(e) => updateFilter('motivo', e.target.value)} className={commonSelectClass}>
+                  <option value="">Motivo</option>
+                  {MOTIVOS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select value={filters.estado} onChange={(e) => updateFilter('estado', e.target.value)} className={commonSelectClass}>
+                  <option value="">Estado</option>
+                  {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select value={filters.reincidencia} onChange={(e) => updateFilter('reincidencia', e.target.value)} className={commonSelectClass}>
+                  <option value="">Reincidência</option>
+                  {REINCIDENCIA.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
