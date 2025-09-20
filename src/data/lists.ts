@@ -1,10 +1,11 @@
 export const MOTORISTAS = [
-  'ANDERSON', 'ANDRE', 'CLAUDEMAR', 'CLAUDIO', 'CRISTIAN', 'CRISTIANO', 
-  'DANIEL', 'DANILO', 'DEIVISON', 'EDBALDO', 'EDEN', 'EDNILSON', 'ELVIS', 
-  'FABIO', 'GALHA', 'GILDASIO', 'GUTEMBERG', 'JANCLEITON', 'JOAO', 'JOIR', 
-  'JOSENILSON', 'LUIZ', 'MAGNO', 'NATAL', 'PAULO', 'NOEL', 'REAL', 'RICARDO', 
-  'ROQUE', 'SERGIO', 'TIAGONOEL', 'TIAGODANILO', 'UANDERSON', 'WEIDINEITON',
-  'Outro (digitar)'
+'Anderson', 'Andre', 'Claudio', 'Concept', 'Cristiano', 'Daniel', 'Danilo', 'Deividson', 'Eden',
+'Ednilson', 'Elipaju', 'Elvis', 'Fabio', 'Gabriel', 'Galha',
+'Gildasio', 'Gustavo Truck', 'Gutemberg', 'Hebert', 'Jancleiton', 'Jeferson', 'Jessiel', 'Joao Paulo', 'Joir',
+'Jose', 'Josenilson', 'Leandro', 'Luciano', 'Luiz', 'Magno', 'Mauricio', 'Natanael',
+'Noel', 'Real', 'Renato', 'Ricardo', 'Roberval', 'Roque', 'Sergio', 'Tiago',
+'Uanderson', 'Washington', 'Welington',
+'Outro (digitar)'
 ];
 
 export const REINCIDENCIA = ['Sim', 'Nao'];
