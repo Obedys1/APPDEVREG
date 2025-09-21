@@ -78,7 +78,7 @@ export const useDevolutions = () => {
     fetchRecords();
   }, [fetchRecords]);
 
-  const saveRecord = async (record: Omit<DevolutionRecord, 'id' | 'usuario' | 'editHistory' | 'anexos'> & { anexos: File[] }) => {
+  const saveRecord = async (record: Omit<DevolutionRecord, 'id' | 'usuario' | 'editHistory' | 'anexos'> & { anexos: File[] }): Promise<DevolutionRecord> => {
     if (!user) throw new Error("Usuário não autenticado.");
     
     const anexoUrls: string[] = [];
@@ -131,6 +131,26 @@ export const useDevolutions = () => {
     }
     
     await fetchRecords();
+
+    const finalRecord: DevolutionRecord = {
+      id: devolutionData.id,
+      usuario_id: user.id,
+      date: record.date,
+      cliente: record.cliente,
+      vendedor: record.vendedor,
+      rede: record.rede,
+      cidade: record.cidade,
+      uf: record.uf,
+      motorista: record.motorista,
+      produtos: record.produtos,
+      observacao: record.observacao,
+      anexos: anexoUrls,
+      status: 'pendente',
+      usuario: user.email || 'N/A',
+      editHistory: [],
+    };
+
+    return finalRecord;
   };
 
   const updateRecord = async (id: string, updates: Partial<DevolutionRecord>) => {

@@ -131,22 +131,46 @@ export const Historico: React.FC = () => {
   };
 
   const generateWhatsAppMessage = (record: DevolutionRecord, product: ProductRecord) => {
-    let message = '🔄 *DETALHE DA DEVOLUÇÃO* 🔄\n\n';
-    message += `*🆔 Registro ID:* ${record.id.substring(0, 8)}\n`;
-    message += `*📅 Data:* ${new Date(record.date).toLocaleDateString('pt-BR')}\n`;
-    message += `*👤 Cliente:* ${record.cliente}\n`;
-    message += `*🚚 Motorista:* ${record.motorista}\n\n`;
+    const EMOJI = {
+      LOOP: String.fromCodePoint(0x1F504),
+      ID: String.fromCodePoint(0x1F194),
+      DATE: String.fromCodePoint(0x1F4C5),
+      LOCATION: String.fromCodePoint(0x1F4CD),
+      TRUCK: String.fromCodePoint(0x1F69A),
+      PACKAGE: String.fromCodePoint(0x1F4E6),
+      RULER: String.fromCodePoint(0x1F4CF),
+      WARNING: String.fromCodePoint(0x26A0),
+      RECYCLE: String.fromCodePoint(0x267B),
+      NOTE: String.fromCodePoint(0x1F4DD),
+      PIN: String.fromCodePoint(0x1F4CC),
+      CAMERA: String.fromCodePoint(0x1F4F7),
+    };
+
+    let message = `${EMOJI.LOOP} *DETALHE DA DEVOLUÇÃO* ${EMOJI.LOOP}\n\n`;
+    message += `*${EMOJI.ID} Registro ID:* ${String(record.id).substring(0, 8)}\n`;
+    message += `*${EMOJI.DATE} Data:* ${new Date(record.date).toLocaleDateString('pt-BR')}\n`;
+    message += `*${EMOJI.LOCATION} Cliente:* ${record.cliente}\n`;
+    message += `*${EMOJI.TRUCK} Motorista:* ${record.motorista}\n\n`;
     message += `*--- Item Devolvido ---*\n`;
-    if (product.codigo) message += `*#️⃣ Código:* ${product.codigo}\n`;
-    message += `*📦 Produto:* ${product.produto}\n`;
-    message += `*🔢 Qtd:* ${product.quantidade} ${product.tipo}\n`;
-    message += `*⚠️ Motivo:* ${product.motivo}\n`;
-    message += `*♻️ Estado:* ${product.estado || 'N/A'}\n`;
-    message += `*🔄 Reincidência:* ${product.reincidencia}\n\n`;
-    if (record.observacao) {
-      message += `*📝 Observação Geral:*\n_${record.observacao}_\n\n`;
+    if (product.codigo) message += `*# Código:* ${product.codigo}\n`;
+    message += `*${EMOJI.PACKAGE} Produto:* ${product.produto}\n`;
+    message += `*${EMOJI.RULER} Qtd:* ${product.quantidade} ${product.tipo}\n`;
+    message += `*${EMOJI.WARNING} Motivo:* ${product.motivo}\n`;
+    message += `*${EMOJI.RECYCLE} Estado:* ${product.estado || 'N/A'}\n`;
+    message += `*${EMOJI.LOOP} Reincidência:* ${product.reincidencia}\n\n`;
+    
+    if (record.anexos && record.anexos.length > 0) {
+      message += `*${EMOJI.CAMERA} Evidências Anexadas:*\n`;
+      record.anexos.forEach((url, index) => {
+        message += `Anexo ${index + 1}: ${url}\n`;
+      });
+      message += '\n';
     }
-    message += `*📌 Status Atual:* ${record.status}\n`;
+
+    if (record.observacao) {
+      message += `*${EMOJI.NOTE} Observação Geral:*\n_${record.observacao}_\n\n`;
+    }
+    message += `*${EMOJI.PIN} Status Atual:* ${record.status}\n`;
     return message;
   };
 

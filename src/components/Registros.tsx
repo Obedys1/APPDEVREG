@@ -153,36 +153,60 @@ export const Registros: React.FC = () => {
     };
   
     const generateWhatsAppMessage = (record: DevolutionRecord) => {
-      let message = '🔄 *REGISTRO DE DEVOLUÇÃO* 🔄\n\n';
-      message += `*📅 Data:* ${new Date(record.date).toLocaleDateString('pt-BR')}\n`;
-      message += `*📍 Cliente:* ${record.cliente}\n`;
-      message += `*👤 Vendedor:* ${record.vendedor}\n`;
-      message += `*🏢 Rede:* ${record.rede}\n`;
-      message += `*🏙️ Cidade:* ${record.cidade} - ${record.uf}\n`;
-      message += `*🚚 Motorista:* ${record.motorista}\n`;
-      message += `*👤 Registrado por:* ${record.usuario}\n\n`;
+      const EMOJI = {
+        LOOP: String.fromCodePoint(0x1F504),
+        DATE: String.fromCodePoint(0x1F4C5),
+        LOCATION: String.fromCodePoint(0x1F4CD),
+        USER: String.fromCodePoint(0x1F464),
+        BUILDING: String.fromCodePoint(0x1F3E2),
+        CITY: String.fromCodePoint(0x1F3D9),
+        TRUCK: String.fromCodePoint(0x1F69A),
+        PACKAGE: String.fromCodePoint(0x1F4E6),
+        TAG: String.fromCodePoint(0x1F3F7),
+        FAMILY: String.fromCodePoint(0x1F46A),
+        RULER: String.fromCodePoint(0x1F4CF),
+        WARNING: String.fromCodePoint(0x26A0),
+        RECYCLE: String.fromCodePoint(0x267B),
+        NOTE: String.fromCodePoint(0x1F4DD),
+        CAMERA: String.fromCodePoint(0x1F4F7),
+        PIN: String.fromCodePoint(0x1F4CC),
+        SEARCH: String.fromCodePoint(0x1F50D),
+      };
+
+      let message = `${EMOJI.LOOP} *REGISTRO DE DEVOLUÇÃO* ${EMOJI.LOOP}\n\n`;
+      message += `*${EMOJI.DATE} Data:* ${new Date(record.date).toLocaleDateString('pt-BR')}\n`;
+      message += `*${EMOJI.LOCATION} Cliente:* ${record.cliente}\n`;
+      message += `*${EMOJI.USER} Vendedor:* ${record.vendedor}\n`;
+      message += `*${EMOJI.BUILDING} Rede:* ${record.rede}\n`;
+      message += `*${EMOJI.CITY} Cidade:* ${record.cidade} - ${record.uf}\n`;
+      message += `*${EMOJI.TRUCK} Motorista:* ${record.motorista}\n`;
+      message += `*${EMOJI.USER} Registrado por:* ${record.usuario}\n\n`;
   
       record.produtos.forEach((produto, index) => {
-        message += `*📦 PRODUTO ${index + 1}*\n`;
-        if (produto.codigo) message += `*🔢 Código:* ${produto.codigo}\n`;
-        message += `*🏷️ Produto:* ${produto.produto}\n`;
-        message += `*👨‍👩‍👧 Família:* ${produto.familia}\n`;
-        message += `*📦 Grupo:* ${produto.grupo}\n`;
-        message += `*📟 Quantidade:* ${produto.quantidade} ${produto.tipo}\n`;
-        message += `*⚠️ Motivo:* ${produto.motivo}\n`;
-        if (produto.estado) message += `*♻️ Estado:* ${produto.estado}\n`;
-        message += `*🔄 Reincidência:* ${produto.reincidencia}\n\n`;
+        message += `*${EMOJI.PACKAGE} PRODUTO ${index + 1}*\n`;
+        if (produto.codigo) message += `*# Código:* ${produto.codigo}\n`;
+        message += `*${EMOJI.TAG} Produto:* ${produto.produto}\n`;
+        message += `*${EMOJI.FAMILY} Família:* ${produto.familia}\n`;
+        message += `*${EMOJI.PACKAGE} Grupo:* ${produto.grupo}\n`;
+        message += `*${EMOJI.RULER} Quantidade:* ${produto.quantidade} ${produto.tipo}\n`;
+        message += `*${EMOJI.WARNING} Motivo:* ${produto.motivo}\n`;
+        if (produto.estado) message += `*${EMOJI.RECYCLE} Estado:* ${produto.estado}\n`;
+        message += `*${EMOJI.LOOP} Reincidência:* ${produto.reincidencia}\n\n`;
       });
   
       if (record.observacao) {
-        message += `*📝 Observação:*\n_${record.observacao}_\n\n`;
+        message += `*${EMOJI.NOTE} Observação:*\n_${record.observacao}_\n\n`;
       }
   
       if (record.anexos.length > 0) {
-        message += `*📷 ${record.anexos.length} imagem(ns) anexada(s)*\n\n`;
+        message += `*${EMOJI.CAMERA} Evidências Anexadas:*\n`;
+        record.anexos.forEach((url, index) => {
+          message += `Anexo ${index + 1}: ${url}\n`;
+        });
+        message += '\n';
       }
   
-      message += `*📌 Status:* 🔍 Em análise\n`;
+      message += `*${EMOJI.PIN} Status:* ${EMOJI.SEARCH} Em análise\n`;
       return message;
     };
   
@@ -225,18 +249,9 @@ export const Registros: React.FC = () => {
           anexos: anexos,
         };
   
-        await saveRecord(recordForSaving);
+        const savedRecord = await saveRecord(recordForSaving);
         
-        const recordForWhatsapp: DevolutionRecord = {
-          ...recordForSaving,
-          id: '',
-          status: 'pendente',
-          usuario: user?.email || 'N/A',
-          editHistory: [],
-          anexos: [], // URLs will be generated on server, not needed for WA message
-        };
-
-        const message = generateWhatsAppMessage(recordForWhatsapp);
+        const message = generateWhatsAppMessage(savedRecord);
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
     
