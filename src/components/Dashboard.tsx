@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, LabelList
+  PieChart, Pie, Cell, LabelList
 } from 'recharts';
-import { TrendingUp, Package, Users, AlertTriangle, Box, DollarSign, BarChart2 } from 'lucide-react';
+import { TrendingUp, Package, Users, AlertTriangle, Box, BarChart2 } from 'lucide-react';
 import { FilterPanel } from './FilterPanel';
 import { useDevolutions } from '../hooks/useDevolutions';
 import { FilterState } from '../types';
@@ -36,11 +36,11 @@ const ChartContainer: React.FC<{ title: string; children: React.ReactNode; class
 export const Dashboard: React.FC = () => {
   const { records, filterRecords } = useDevolutions();
   const [filters, setFilters] = useState<FilterState>({
-    search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: ''
+    search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '',
+    familia: '', grupo: '', vendedor: '', rede: '', cidade: '', uf: ''
   });
-  const [evolutionFilter, setEvolutionFilter] = useState<'diario' | 'semanal' | 'mensal' | 'anual'>('diario');
 
-  const filteredRecords = useMemo(() => filterRecords(filters), [records, filters]);
+  const filteredRecords = useMemo(() => filterRecords(filters), [records, filters, filterRecords]);
 
   const stats = useMemo(() => {
     const totalQuantity = filteredRecords.reduce((sum, record) => sum + record.produtos.reduce((prodSum, p) => prodSum + p.quantidade, 0), 0);
@@ -61,7 +61,6 @@ export const Dashboard: React.FC = () => {
   }, [filteredRecords]);
 
   const chartData = useMemo(() => {
-    const today = new Date();
     const productCounts = filteredRecords.reduce((acc, r) => { r.produtos.forEach(p => { acc[p.produto] = (acc[p.produto] || 0) + p.quantidade; }); return acc; }, {} as Record<string, number>);
     const topProducts = Object.entries(productCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, value]) => ({ name: name.substring(0, 15) + (name.length > 15 ? '...' : ''), value, fullName: name }));
     
@@ -73,13 +72,14 @@ export const Dashboard: React.FC = () => {
 
     const estadoCounts = filteredRecords.reduce((acc, r) => { r.produtos.forEach(p => { if (p.estado) acc[p.estado] = (acc[p.estado] || 0) + 1; }); return acc; }, {} as Record<string, number>);
     const estadoData = Object.entries(estadoCounts).map(([name, value]) => ({ name, value }));
-
-    const getEvolutionData = () => { /* ... same logic as before ... */ return []; };
     
-    return { topProducts, topClients, motivoData, estadoData, evolutionData: getEvolutionData() };
-  }, [filteredRecords, evolutionFilter]);
+    return { topProducts, topClients, motivoData, estadoData };
+  }, [filteredRecords]);
 
-  const clearFilters = () => setFilters({ search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '' });
+  const clearFilters = () => setFilters({ 
+    search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '',
+    familia: '', grupo: '', vendedor: '', rede: '', cidade: '', uf: ''
+  });
 
   return (
     <div className="space-y-8">

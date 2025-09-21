@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Calendar, User, Truck, Package, Scale, AlertTriangle, FileText, Camera, Upload, Save, Plus, XCircle, Hash, Box, Users } from 'lucide-react';
-import { CLIENTES, MOTORISTAS, PRODUTOS_DETALHADOS, FAMILIAS, TIPOS, MOTIVOS, ESTADOS, REINCIDENCIA } from '../data/lists';
+import { Calendar, User, Truck, Package, Scale, AlertTriangle, FileText, Camera, Upload, Save, XCircle, Hash, Box, Users, MapPin, Globe, Building } from 'lucide-react';
+import { CLIENTES_DETALHADOS, MOTORISTAS, PRODUTOS_DETALHADOS, FAMILIAS, TIPOS, MOTIVOS, ESTADOS, REINCIDENCIA } from '../data/lists';
 import { DevolutionRecord, ProductRecord } from '../types';
 import { useDevolutions } from '../hooks/useDevolutions';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,13 +13,19 @@ export const Registros: React.FC = () => {
     const [showAddProductDialog, setShowAddProductDialog] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     
-    const [formData, setFormData] = useState({
+    const initialFormState = {
       data: new Date().toISOString().split('T')[0],
       cliente: '',
+      vendedor: '',
+      rede: '',
+      cidade: '',
+      uf: '',
       motorista: '',
       customMotorista: '',
       observacao: ''
-    });
+    };
+
+    const [formData, setFormData] = useState(initialFormState);
 
     const initialProductState: ProductRecord = {
       codigo: '',
@@ -43,6 +49,29 @@ export const Registros: React.FC = () => {
   
     const [anexos, setAnexos] = useState<File[]>([]);
   
+    const handleClienteChange = (clienteNome: string) => {
+      const clienteData = CLIENTES_DETALHADOS.find(c => c.cliente === clienteNome);
+      if (clienteData) {
+        setFormData(prev => ({
+          ...prev,
+          cliente: clienteData.cliente,
+          vendedor: clienteData.vendedor,
+          rede: clienteData.rede,
+          cidade: clienteData.cidade,
+          uf: clienteData.uf,
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          cliente: '',
+          vendedor: '',
+          rede: '',
+          cidade: '',
+          uf: '',
+        }));
+      }
+    };
+
     const updateFormData = (field: string, value: string) => {
       setFormData(prev => ({ ...prev, [field]: value }));
     };
@@ -127,6 +156,9 @@ export const Registros: React.FC = () => {
       let message = '🔄 *REGISTRO DE DEVOLUÇÃO* 🔄\n\n';
       message += `*📅 Data:* ${new Date(record.date).toLocaleDateString('pt-BR')}\n`;
       message += `*📍 Cliente:* ${record.cliente}\n`;
+      message += `*👤 Vendedor:* ${record.vendedor}\n`;
+      message += `*🏢 Rede:* ${record.rede}\n`;
+      message += `*🏙️ Cidade:* ${record.cidade} - ${record.uf}\n`;
       message += `*🚚 Motorista:* ${record.motorista}\n`;
       message += `*👤 Registrado por:* ${record.usuario}\n\n`;
   
@@ -183,6 +215,10 @@ export const Registros: React.FC = () => {
         const recordForSaving = {
           date: new Date(formData.data).toISOString(),
           cliente: formData.cliente,
+          vendedor: formData.vendedor,
+          rede: formData.rede,
+          cidade: formData.cidade,
+          uf: formData.uf,
           motorista: formData.motorista === 'Outro (digitar)' ? formData.customMotorista : formData.motorista,
           produtos: processedProdutos,
           observacao: formData.observacao,
@@ -204,7 +240,7 @@ export const Registros: React.FC = () => {
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
     
-        setFormData({ data: new Date().toISOString().split('T')[0], cliente: '', motorista: '', customMotorista: '', observacao: '' });
+        setFormData(initialFormState);
         setProdutos([initialProductState]);
         setCustomValues({});
         setAnexos([]);
@@ -220,7 +256,8 @@ export const Registros: React.FC = () => {
     };
 
   const commonInputClass = "w-full bg-brand-surface border border-gray-300/70 rounded-lg py-2 px-3 text-sm text-brand-text-base focus:ring-2 focus:ring-brand-secondary focus:border-transparent transition";
-  
+  const readOnlyInputClass = "w-full bg-gray-100 border border-gray-300/70 rounded-lg py-2 px-3 text-sm text-gray-500 transition";
+
   return (
     <div className="space-y-8">
       <h1 className="text-4xl font-bold text-brand-primary">Novo Registro de Devolução</h1>
@@ -228,7 +265,7 @@ export const Registros: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-8">
         <div className="bg-brand-surface rounded-2xl shadow-lg p-8">
           <h2 className="text-xl font-semibold text-brand-primary mb-6">Informações Gerais</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-2">
                 <Calendar className="h-4 w-4" /> Data *
@@ -239,9 +276,9 @@ export const Registros: React.FC = () => {
               <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-2">
                 <User className="h-4 w-4" /> Cliente *
               </label>
-              <select value={formData.cliente} onChange={(e) => updateFormData('cliente', e.target.value)} className={commonInputClass} required>
+              <select value={formData.cliente} onChange={(e) => handleClienteChange(e.target.value)} className={commonInputClass} required>
                 <option value="">Selecionar cliente...</option>
-                {CLIENTES.map(c => <option key={c} value={c}>{c}</option>)}
+                {CLIENTES_DETALHADOS.map(c => <option key={c.cliente} value={c.cliente}>{c.cliente}</option>)}
               </select>
             </div>
             <div>
@@ -255,6 +292,27 @@ export const Registros: React.FC = () => {
               {formData.motorista === 'Outro (digitar)' && (
                 <input type="text" placeholder="Nome do motorista" value={formData.customMotorista} onChange={(e) => updateFormData('customMotorista', e.target.value)} className={`${commonInputClass} mt-2`} required />
               )}
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-2">
+                <Users className="h-4 w-4" /> Vendedor
+              </label>
+              <input type="text" value={formData.vendedor} className={readOnlyInputClass} readOnly />
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-2">
+                <Building className="h-4 w-4" /> Rede
+              </label>
+              <input type="text" value={formData.rede} className={readOnlyInputClass} readOnly />
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-2">
+                <MapPin className="h-4 w-4" /> Cidade / UF
+              </label>
+              <div className="flex gap-2">
+                <input type="text" value={formData.cidade} className={`${readOnlyInputClass} flex-grow`} readOnly />
+                <input type="text" value={formData.uf} className={`${readOnlyInputClass} w-16`} readOnly />
+              </div>
             </div>
           </div>
         </div>

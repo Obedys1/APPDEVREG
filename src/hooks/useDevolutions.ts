@@ -30,6 +30,10 @@ export const useDevolutions = () => {
           created_at,
           date,
           cliente,
+          vendedor,
+          rede,
+          cidade,
+          uf,
           motorista,
           observacao,
           status,
@@ -97,6 +101,10 @@ export const useDevolutions = () => {
       .insert({
         date: record.date,
         cliente: record.cliente,
+        vendedor: record.vendedor,
+        rede: record.rede,
+        cidade: record.cidade,
+        uf: record.uf,
         motorista: record.motorista,
         observacao: record.observacao,
         status: 'pendente',
@@ -249,21 +257,17 @@ export const useDevolutions = () => {
         );
     }
     
-    if (filters.cliente && filters.cliente !== '') {
-        filtered = filtered.filter(r => r.cliente === filters.cliente);
-    }
-    if (filters.produto && filters.produto !== '') {
-        filtered = filtered.filter(r => r.produtos.some(p => p.produto === filters.produto));
-    }
-    if (filters.motivo && filters.motivo !== '') {
-        filtered = filtered.filter(r => r.produtos.some(p => p.motivo === filters.motivo));
-    }
-    if (filters.estado && filters.estado !== '') {
-        filtered = filtered.filter(r => r.produtos.some(p => p.estado === filters.estado));
-    }
-    if (filters.reincidencia && filters.reincidencia !== '') {
-        filtered = filtered.filter(r => r.produtos.some(p => p.reincidencia === filters.reincidencia));
-    }
+    if (filters.cliente) filtered = filtered.filter(r => r.cliente === filters.cliente);
+    if (filters.vendedor) filtered = filtered.filter(r => r.vendedor === filters.vendedor);
+    if (filters.rede) filtered = filtered.filter(r => r.rede === filters.rede);
+    if (filters.cidade) filtered = filtered.filter(r => r.cidade === filters.cidade);
+    if (filters.uf) filtered = filtered.filter(r => r.uf === filters.uf);
+    if (filters.produto) filtered = filtered.filter(r => r.produtos.some(p => p.produto === filters.produto));
+    if (filters.familia) filtered = filtered.filter(r => r.produtos.some(p => p.familia === filters.familia));
+    if (filters.grupo) filtered = filtered.filter(r => r.produtos.some(p => p.grupo === filters.grupo));
+    if (filters.motivo) filtered = filtered.filter(r => r.produtos.some(p => p.motivo === filters.motivo));
+    if (filters.estado) filtered = filtered.filter(r => r.produtos.some(p => p.estado === filters.estado));
+    if (filters.reincidencia) filtered = filtered.filter(r => r.produtos.some(p => p.reincidencia === filters.reincidencia));
 
     return filtered;
   }, [records]);

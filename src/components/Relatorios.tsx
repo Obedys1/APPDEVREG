@@ -28,11 +28,15 @@ const ActionButton: React.FC<{ onClick: () => void; children: React.ReactNode; c
 export const Relatorios: React.FC = () => {
   const { records, filterRecords } = useDevolutions();
   const [filters, setFilters] = useState<FilterState>({
-    search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: ''
+    search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '',
+    familia: '', grupo: '', vendedor: '', rede: '', cidade: '', uf: ''
   });
 
-  const filteredRecords = useMemo(() => filterRecords(filters), [records, filters]);
-  const clearFilters = () => setFilters({ search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '' });
+  const filteredRecords = useMemo(() => filterRecords(filters), [records, filters, filterRecords]);
+  const clearFilters = () => setFilters({ 
+    search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '',
+    familia: '', grupo: '', vendedor: '', rede: '', cidade: '', uf: ''
+  });
 
   // PDF and WhatsApp generation functions remain the same
   const generatePDFGeneral = () => { toast.success('Gerando PDF Geral...'); };

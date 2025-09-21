@@ -2,6 +2,10 @@ export interface DevolutionRecord {
   id: string;
   date: string;
   cliente: string;
+  vendedor: string;
+  rede: string;
+  cidade: string;
+  uf: string;
   motorista: string;
   produtos: ProductRecord[];
   observacao: string;
@@ -39,4 +43,18 @@ export interface FilterState {
   produto: string;
   cliente: string;
   reincidencia: string;
+  familia: string;
+  grupo: string;
+  vendedor: string;
+  rede: string;
+  cidade: string;
+  uf: string;
+}
+
+export interface ClienteDetalhado {
+  vendedor: string;
+  rede: string;
+  cidade: string;
+  uf: string;
+  cliente: string;
 }
