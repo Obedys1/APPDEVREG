@@ -50,9 +50,9 @@ export const useDevolutions = () => {
             motivo,
             estado,
             reincidencia
-          )
+          ),
+          profiles ( email )
         `)
-        .eq('usuario_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -61,7 +61,7 @@ export const useDevolutions = () => {
         ...d,
         produtos: d.produtos_devolvidos || [],
         anexos: d.anexos_urls || [],
-        usuario: user.email || 'N/A',
+        usuario: d.profiles?.email || d.usuario_id, // Use email from profile, fallback to ID
         editHistory: [], // This should be fetched if stored in DB
       })) as DevolutionRecord[];
 

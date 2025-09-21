@@ -1,5 +1,6 @@
 export interface DevolutionRecord {
   id: string;
+  usuario_id: string;
   date: string;
   cliente: string;
   vendedor: string;
@@ -10,7 +11,7 @@ export interface DevolutionRecord {
   produtos: ProductRecord[];
   observacao: string;
   anexos: string[];
-  status: 'pendente' | 'em_analise' | 'finalizado';
+  status: 'pendente' | 'em_analise' | 'revisado' | 'finalizado';
   usuario: string;
   editHistory: EditHistory[];
 }
