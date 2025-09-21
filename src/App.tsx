@@ -29,7 +29,14 @@ const AppContent: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-brand-background flex items-center justify-center"><p className="text-brand-primary">Carregando...</p></div>;
+    return (
+      <div className="min-h-screen bg-brand-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <img src="https://i.ibb.co/67X3xfSV/gdm-devolucoes-logo.png" alt="GDM Logo" className="h-24 animate-pulse" />
+          <p className="text-brand-primary font-semibold">Carregando...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

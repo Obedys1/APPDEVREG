@@ -16,58 +16,67 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const checkAndCreateProfile = async (user: User) => {
-    try {
-      const { error: selectError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-
-      if (selectError && selectError.code === 'PGRST116') {
-        console.log(`Profile for user ${user.id} not found. Creating one.`);
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({ id: user.id });
-
-        if (insertError) throw insertError;
-        console.log(`Profile for user ${user.id} created successfully.`);
-      } else if (selectError) {
-        throw selectError;
-      }
-    } catch (error: any) {
-      console.error('Error in checkAndCreateProfile:', error.message);
-      toast.error('Ocorreu um erro ao configurar seu perfil.');
-    }
-  };
-
   useEffect(() => {
-    // O listener onAuthStateChange do Supabase é a fonte única da verdade.
-    // Ele é disparado uma vez no carregamento inicial e novamente sempre que o estado de autenticação muda.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    let isMounted = true;
 
-      // Se um usuário estiver logado (seja no carregamento ou após o login), garanta que seu perfil exista.
-      if (session?.user) {
-        await checkAndCreateProfile(session.user);
+    const checkInitialSession = async () => {
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+
+        if (!isMounted) return;
+
+        if (initialSession) {
+          // A função RPC 'ensure_profile_exists' no banco de dados foi atualizada para ser idempotente.
+          // Ela agora lida com casos onde o perfil já existe (ON CONFLICT DO NOTHING),
+          // resolvendo o erro de "chave duplicada" que causava o loop de autenticação.
+          const { error: rpcError } = await supabase.rpc('ensure_profile_exists');
+          if (rpcError) {
+            console.error("Error ensuring profile, signing out:", rpcError.message);
+            toast.error('Falha ao verificar seu perfil. Fazendo logout por segurança.');
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+          } else {
+            setSession(initialSession);
+            setUser(initialSession.user);
+          }
+        }
+      } catch (error: any) {
+        console.error("Critical error during initial session check:", error.message);
+        toast.error("Ocorreu um erro crítico na autenticação.");
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      
-      // A verificação inicial de autenticação está completa, podemos parar o carregamento.
-      setLoading(false);
+    };
+
+    checkInitialSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (isMounted) {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (_event === 'SIGNED_IN' && session) {
+          (async () => {
+            const { error } = await supabase.rpc('ensure_profile_exists');
+            if (error) {
+              console.error("Error ensuring profile on SIGNED_IN event:", error.message);
+              toast.error('Falha ao sincronizar o perfil após o login.');
+            }
+          })();
+        }
+      }
     });
 
-    // Limpa a inscrição quando o componente é desmontado
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
-  }, []); // O array de dependências vazio garante que isso rode apenas uma vez para configurar o listener.
+  }, []);
 
-  const value = {
-    session,
-    user,
-    loading,
-  };
+  const value = { session, user, loading };
 
   return (
     <AuthContext.Provider value={value}>
