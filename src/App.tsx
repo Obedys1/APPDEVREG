@@ -7,6 +7,7 @@ import { Registros } from './components/Registros';
 import { Historico } from './components/Historico';
 import { Relatorios } from './components/Relatorios';
 import { Login } from './components/Login';
+import { Ocorrencias } from './components/Ocorrencias';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 const AppContent: React.FC = () => {
@@ -19,6 +20,8 @@ const AppContent: React.FC = () => {
         return <Dashboard />;
       case 'registros':
         return <Registros />;
+      case 'ocorrencias':
+        return <Ocorrencias />;
       case 'historico':
         return <Historico />;
       case 'relatorios':

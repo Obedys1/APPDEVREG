@@ -33,7 +33,7 @@ export const Registros: React.FC = () => {
       familia: '',
       grupo: '',
       quantidade: 0,
-      tipo: '',
+      tipo: 'Cx',
       motivo: '',
       estado: '',
       reincidencia: ''
@@ -275,7 +275,7 @@ export const Registros: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-4xl font-bold text-brand-primary">Novo Registro de Devolução</h1>
+      <h1 className="text-4xl font-bold text-brand-primary">Registrar Devolução</h1>
       
       <form onSubmit={handleSubmit} className="space-y-8">
         <div className="bg-brand-surface rounded-2xl shadow-lg p-8">
@@ -312,21 +312,21 @@ export const Registros: React.FC = () => {
               <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-2">
                 <Users className="h-4 w-4" /> Vendedor
               </label>
-              <input type="text" value={formData.vendedor} className={readOnlyInputClass} readOnly />
+              <input type="text" value={formData.vendedor} onChange={(e) => updateFormData('vendedor', e.target.value)} className={commonInputClass} />
             </div>
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-2">
                 <Building className="h-4 w-4" /> Rede
               </label>
-              <input type="text" value={formData.rede} className={readOnlyInputClass} readOnly />
+              <input type="text" value={formData.rede} onChange={(e) => updateFormData('rede', e.target.value)} className={commonInputClass} />
             </div>
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-2">
                 <MapPin className="h-4 w-4" /> Cidade / UF
               </label>
               <div className="flex gap-2">
-                <input type="text" value={formData.cidade} className={`${readOnlyInputClass} flex-grow`} readOnly />
-                <input type="text" value={formData.uf} className={`${readOnlyInputClass} w-16`} readOnly />
+                <input type="text" value={formData.cidade} onChange={(e) => updateFormData('cidade', e.target.value)} className={`${commonInputClass} flex-grow`} />
+                <input type="text" value={formData.uf} onChange={(e) => updateFormData('uf', e.target.value)} className={`${commonInputClass} w-16`} />
               </div>
             </div>
           </div>
@@ -349,7 +349,7 @@ export const Registros: React.FC = () => {
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-1"><Package className="h-4 w-4" /> Produto</label>
-                  <input type="text" value={produto.produto} className={`${commonInputClass} bg-gray-100`} readOnly />
+                  <input type="text" value={produto.produto} className={`${readOnlyInputClass}`} readOnly />
                 </div>
                  <div>
                   <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-1"><Box className="h-4 w-4" /> Família *</label>
@@ -360,7 +360,7 @@ export const Registros: React.FC = () => {
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-1"><Users className="h-4 w-4" /> Grupo</label>
-                  <input type="text" value={produto.grupo} className={`${commonInputClass} bg-gray-100`} readOnly />
+                  <input type="text" value={produto.grupo} className={`${readOnlyInputClass}`} readOnly />
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-1"><Scale className="h-4 w-4" /> Quantidade *</label>

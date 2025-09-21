@@ -1,21 +1,24 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, Legend, LabelList
 } from 'recharts';
-import { TrendingUp, Package, Users, AlertTriangle, UserCheck, Building, BarChart2, Box, Users2, Truck, Info } from 'lucide-react';
+import { TrendingUp, Package, Users, AlertTriangle, UserCheck, Building, BarChart2, Box, Users2, Truck, Info, FileDown } from 'lucide-react';
 import { FilterPanel } from './FilterPanel';
 import { useDevolutions } from '../hooks/useDevolutions';
 import { FilterState } from '../types';
 import { motion } from 'framer-motion';
-import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, subDays, isSameDay, isSameMonth, isSameWeek, startOfToday } from 'date-fns';
+import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, subDays, isSameMonth, startOfToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import toast from 'react-hot-toast';
 
 const CHART_COLORS = ['#013D28', '#F9A03F', '#2E7D32', '#FFB74D', '#4CAF50', '#FFA726', '#81C784', '#FFD54F'];
 
 const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string | number; subtitle?: string; }> = ({ icon, title, value, subtitle }) => (
   <motion.div
-    className="bg-brand-surface rounded-2xl shadow-lg p-6 flex items-start gap-4"
+    className="bg-brand-surface rounded-2xl shadow-lg p-5 flex items-start gap-4"
     whileHover={{ y: -5, boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)' }}
     transition={{ type: 'spring', stiffness: 300 }}
   >
@@ -23,8 +26,8 @@ const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string |
       {icon}
     </div>
     <div className="flex-1 min-w-0">
-      <p className="text-sm font-medium text-brand-text-muted">{title}</p>
-      <p className="text-xl lg:text-2xl font-bold text-brand-primary break-words" title={String(value)}>{value}</p>
+      <p className="text-xs font-medium text-brand-text-muted">{title}</p>
+      <p className="text-xl font-bold text-brand-primary break-words" title={String(value)}>{value}</p>
       {subtitle && <p className="text-xs text-brand-text-muted">{subtitle}</p>}
     </div>
   </motion.div>
@@ -59,6 +62,8 @@ export const Dashboard: React.FC = () => {
     familia: '', grupo: '', vendedor: '', rede: '', cidade: '', uf: ''
   });
   const [evolutionFilter, setEvolutionFilter] = useState<'diario' | 'semanal' | 'mensal'>('diario');
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const dashboardRef = useRef<HTMLDivElement>(null);
 
   const filteredRecords = useMemo(() => filterRecords(filters), [records, filters, filterRecords]);
 
@@ -162,28 +167,27 @@ export const Dashboard: React.FC = () => {
 
     const getTopNByCount = (key: 'cliente' | 'motivo' | 'vendedor' | 'rede', n: number) => {
       const counts: Record<string, number> = {};
-      filteredRecords.forEach(r => {
-        const itemKey = r[key as 'cliente' | 'vendedor' | 'rede'];
+      let targetRecords: any[] = filteredRecords;
+
+      if (key === 'motivo') {
+        targetRecords = filteredRecords.flatMap(r => r.produtos);
+      }
+
+      targetRecords.forEach(r => {
+        const itemKey = key === 'motivo' ? r.motivo : r[key as 'cliente' | 'vendedor' | 'rede'];
         if(itemKey) counts[itemKey] = (counts[itemKey] || 0) + 1;
       });
+
       return Object.entries(counts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, n)
         .map(([name, value]) => ({ name: name.substring(0, 25) + (name.length > 25 ? '...' : ''), value, fullName: name }));
     };
-    
-    const getTopNMotivos = (n: number) => {
-        const counts: Record<string, number> = {};
-        filteredRecords.forEach(r => r.produtos.forEach(p => {
-            if(p.motivo) counts[p.motivo] = (counts[p.motivo] || 0) + 1;
-        }));
-        return Object.entries(counts).sort((a,b) => b[1] - a[1]).slice(0,n).map(([name, value]) => ({ name: name.substring(0, 25) + (name.length > 25 ? '...' : ''), value, fullName: name }));
-    }
 
     return {
-      motivoData: getTopNMotivos(10),
-      topProdutos: getTopNByQuantity('produto', 5).reverse(),
-      topClientes: getTopNByCount('cliente', 5).reverse(),
+      motivoData: getTopNByCount('motivo', 10),
+      topProdutos: getTopNByQuantity('produto', 5),
+      topClientes: getTopNByCount('cliente', 5),
       redeData: getTopNByCount('rede', 5),
       vendedorData: getTopNByCount('vendedor', 5),
     };
@@ -193,7 +197,6 @@ export const Dashboard: React.FC = () => {
     const alerts: { title: string; message: string; type: 'warning' | 'info' }[] = [];
     const today = startOfToday();
 
-    // Alert 1: Frequent client returns in the last 7 days
     const clientReturns: Record<string, number> = {};
     const sevenDaysAgo = subDays(today, 7);
     filteredRecords.forEach(r => {
@@ -203,7 +206,7 @@ export const Dashboard: React.FC = () => {
     });
 
     Object.entries(clientReturns).forEach(([cliente, count]) => {
-      if (count > 3) { // Threshold for "frequent"
+      if (count > 3) {
         alerts.push({
           title: 'Cliente com Devoluções Frequentes',
           message: `O cliente ${cliente} realizou ${count} devoluções nos últimos 7 dias.`,
@@ -212,7 +215,6 @@ export const Dashboard: React.FC = () => {
       }
     });
 
-    // Alert 2: Most common reasons this month
     const motiveCounts: Record<string, number> = {};
     const currentMonthRecords = filteredRecords.filter(r => isSameMonth(parseISO(r.date), today));
     currentMonthRecords.forEach(r => r.produtos.forEach(p => {
@@ -247,18 +249,58 @@ export const Dashboard: React.FC = () => {
     </button>
   );
 
+  const handleDownloadPdf = async () => {
+    if (!dashboardRef.current) return;
+    setIsDownloadingPdf(true);
+    const toastId = toast.loading('Gerando PDF do Dashboard...');
+
+    try {
+      const canvas = await html2canvas(dashboardRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#FBF5EB',
+      });
+      const imgData = canvas.toDataURL('image/png');
+      
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(`dashboard-gdm-${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('PDF gerado com sucesso!', { id: toastId });
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Falha ao gerar o PDF.', { id: toastId });
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   return (
-    <div className="space-y-8">
+    <div ref={dashboardRef} className="space-y-8 p-1">
       <div className="flex flex-wrap justify-between items-center gap-4">
         <h1 className="text-4xl font-bold text-brand-primary">Dashboard</h1>
-        <div className="text-sm text-brand-text-muted font-medium">
-          {filteredRecords.length > 0 ? `Exibindo dados de ${filteredRecords.length} registros` : 'Nenhum registro encontrado'}
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-brand-text-muted font-medium">
+            {filteredRecords.length > 0 ? `Exibindo dados de ${filteredRecords.length} registros` : 'Nenhum registro encontrado'}
+          </div>
+          <button
+            onClick={handleDownloadPdf}
+            disabled={isDownloadingPdf}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-brand-primary text-white font-medium hover:bg-opacity-90 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <FileDown className="h-4 w-4" />
+            {isDownloadingPdf ? 'Gerando...' : 'Dashboard em PDF'}
+          </button>
         </div>
       </div>
       <FilterPanel filters={filters} onFiltersChange={setFilters} onClearFilters={clearFilters} />
 
       <motion.div 
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6"
         initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
       >
         <StatCard icon={<BarChart2 className="h-6 w-6 text-brand-primary" />} title="Total Devoluções" value={stats.totalRecords} />
@@ -318,7 +360,7 @@ export const Dashboard: React.FC = () => {
             <BarChart data={chartData.motivoData} layout="vertical" margin={{ top: 5, right: 30, left: 80, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
               <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} allowDecimals={false} />
-              <YAxis dataKey="name" type="category" stroke="#999" tick={{ fontSize: 12 }} width={80} />
+              <YAxis dataKey="name" type="category" stroke="#999" tick={{ fontSize: 12, width: 100 }} width={110} />
               <Tooltip cursor={{ fill: 'rgba(1, 61, 40, 0.1)' }} contentStyle={{ backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '10px' }} />
               <Bar dataKey="value" name="Ocorrências" fill="#013D28">
                 <LabelList dataKey="value" position="right" style={{ fill: '#013D28', fontSize: 12 }} />
@@ -343,13 +385,13 @@ export const Dashboard: React.FC = () => {
 
         <ChartContainer title="Top 5 Clientes com Devolução" className="lg:col-span-2">
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData.topClientes} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+            <BarChart data={chartData.topClientes} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
-              <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} allowDecimals={false} />
-              <YAxis dataKey="name" type="category" stroke="#999" tick={{ fontSize: 12 }} width={120} />
+              <XAxis dataKey="name" stroke="#999" tick={{ fontSize: 12 }} />
+              <YAxis stroke="#999" tick={{ fontSize: 12 }} allowDecimals={false} />
               <Tooltip cursor={{ fill: 'rgba(1, 61, 40, 0.1)' }} contentStyle={{ backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '10px' }} />
               <Bar dataKey="value" name="Devoluções" fill="#2E7D32">
-                <LabelList dataKey="value" position="right" style={{ fill: '#2E7D32', fontSize: 12 }} />
+                <LabelList dataKey="value" position="top" style={{ fill: '#2E7D32', fontSize: 12 }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -358,7 +400,7 @@ export const Dashboard: React.FC = () => {
         <ChartContainer title="Devoluções por Rede">
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
-              <Pie data={chartData.redeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+              <Pie data={chartData.redeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
                 {chartData.redeData.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
               </Pie>
               <Tooltip />
@@ -370,7 +412,7 @@ export const Dashboard: React.FC = () => {
         <ChartContainer title="Devoluções por Vendedor">
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
-              <Pie data={chartData.vendedorData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+              <Pie data={chartData.vendedorData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
                 {chartData.vendedorData.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS.slice(2)[index % CHART_COLORS.slice(2).length]} />)}
               </Pie>
               <Tooltip />

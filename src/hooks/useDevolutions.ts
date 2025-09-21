@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { DevolutionRecord, FilterState } from '../types';
+import { DevolutionRecord, FilterState, ProductRecord } from '../types';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -61,8 +61,8 @@ export const useDevolutions = () => {
         ...d,
         produtos: d.produtos_devolvidos || [],
         anexos: d.anexos_urls || [],
-        usuario: d.profiles?.email || d.usuario_id, // Use email from profile, fallback to ID
-        editHistory: [], // This should be fetched if stored in DB
+        usuario: d.profiles?.email || d.usuario_id,
+        editHistory: [],
       })) as DevolutionRecord[];
 
       setRecords(formattedData);
@@ -153,12 +153,70 @@ export const useDevolutions = () => {
     return finalRecord;
   };
 
-  const updateRecord = async (id: string, updates: Partial<DevolutionRecord>) => {
-    const { error } = await supabase
-      .from('devolucoes')
-      .update(updates)
-      .eq('id', id);
-    if (error) throw error;
+  const updateRecord = async (id: string, updates: Partial<Omit<DevolutionRecord, 'produtos' | 'anexos'>> & { produtos?: ProductRecord[], anexos?: (File | string)[] }) => {
+    if (!user) throw new Error("Usuário não autenticado.");
+
+    // Separate files from URLs
+    const newFiles = updates.anexos?.filter(a => a instanceof File) as File[] || [];
+    const existingUrls = updates.anexos?.filter(a => typeof a === 'string') as string[] || [];
+    
+    // Upload new files
+    const newAnexoUrls: string[] = [];
+    for (const file of newFiles) {
+        const filePath = `${user.id}/${Date.now()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage.from('anexos_devolucoes').upload(filePath, file);
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from('anexos_devolucoes').getPublicUrl(filePath);
+        newAnexoUrls.push(publicUrl);
+    }
+    const finalAnexos = [...existingUrls, ...newAnexoUrls];
+
+    // Update the main devolution record
+    const { produtos, anexos, ...mainUpdates } = updates;
+    const { error: mainError } = await supabase
+        .from('devolucoes')
+        .update({ ...mainUpdates, anexos_urls: finalAnexos })
+        .eq('id', id);
+
+    if (mainError) throw mainError;
+
+    // Handle product updates with upsert
+    if (produtos) {
+        const produtosParaUpsert = produtos.map(p => ({
+            id: p.id, // Must exist for upsert to work on updates
+            devolution_id: id,
+            codigo: p.codigo,
+            produto: p.produto,
+            familia: p.familia,
+            grupo: p.grupo,
+            quantidade: p.quantidade,
+            tipo: p.tipo,
+            motivo: p.motivo,
+            estado: p.estado,
+            reincidencia: p.reincidencia
+        }));
+
+        // Delete products that are no longer in the list
+        const productsToDelete = records.find(r => r.id === id)?.produtos
+            .filter(oldProd => !produtosParaUpsert.some(newProd => newProd.id === oldProd.id))
+            .map(p => p.id);
+
+        if (productsToDelete && productsToDelete.length > 0) {
+            const { error: deleteError } = await supabase
+                .from('produtos_devolvidos')
+                .delete()
+                .in('id', productsToDelete);
+            if (deleteError) console.error("Error deleting old products:", deleteError);
+        }
+
+        // Upsert new and existing products
+        const { error: productsError } = await supabase
+            .from('produtos_devolvidos')
+            .upsert(produtosParaUpsert, { onConflict: 'id' });
+
+        if (productsError) throw productsError;
+    }
+
     await fetchRecords();
   };
 

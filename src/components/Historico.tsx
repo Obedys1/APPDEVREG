@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Share, Trash2, Image, X, ClipboardList, PackageX, AlertCircle, Lock } from 'lucide-react';
+import { Share, Trash2, Image, X, ClipboardList, PackageX, AlertCircle, FilePenLine } from 'lucide-react';
 import { FilterPanel } from './FilterPanel';
 import { useDevolutions } from '../hooks/useDevolutions';
-import { useAuth } from '../contexts/AuthContext';
 import { FilterState, DevolutionRecord, ProductRecord } from '../types';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { EditRecordModal } from './EditRecordModal';
 
 interface FlatRecord extends ProductRecord {
   parentRecord: DevolutionRecord;
@@ -52,12 +52,12 @@ const ImageItem: React.FC<{ url: string; index: number }> = ({ url, index }) => 
 
 export const Historico: React.FC = () => {
   const { records, updateRecord, deleteRecord, filterRecords } = useDevolutions();
-  const { user } = useAuth();
   const [filters, setFilters] = useState<FilterState>({
     search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '',
     familia: '', grupo: '', vendedor: '', rede: '', cidade: '', uf: ''
   });
   const [imageModal, setImageModal] = useState<string[] | null>(null);
+  const [editingRecord, setEditingRecord] = useState<DevolutionRecord | null>(null);
 
   const filteredRecords = useMemo(() => filterRecords(filters), [records, filters, filterRecords]);
 
@@ -84,11 +84,6 @@ export const Historico: React.FC = () => {
   });
 
   const toggleStatus = async (record: DevolutionRecord) => {
-    const isOwner = user?.id === record.usuario_id;
-    if (!isOwner) {
-      toast.error('Você não tem permissão para alterar o status deste registro.');
-      return;
-    }
     if (record.status !== 'pendente' && record.status !== 'revisado') {
       toast.error('Apenas o status de registros "Pendentes" ou "Revisados" pode ser alterado.');
       return;
@@ -114,18 +109,16 @@ export const Historico: React.FC = () => {
       finalizado: { bg: 'bg-green-100', text: 'text-green-800', label: 'Finalizado' }
     };
     const config = statusConfig[record.status];
-    const isOwner = user?.id === record.usuario_id;
-    const isClickable = isOwner && (record.status === 'pendente' || record.status === 'revisado');
+    const isClickable = record.status === 'pendente' || record.status === 'revisado';
     
     return (
       <button 
         onClick={() => toggleStatus(record)} 
         disabled={!isClickable} 
         className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${config.bg} ${config.text} ${isClickable ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'} transition`}
-        title={isOwner ? 'Clique para alterar' : 'Apenas o criador pode alterar'}
+        title={isClickable ? 'Clique para alterar' : 'Status não pode ser alterado'}
       >
         {config.label}
-        {!isOwner && <Lock className="h-2.5 w-2.5" />}
       </button>
     );
   };
@@ -142,7 +135,7 @@ export const Historico: React.FC = () => {
       WARNING: String.fromCodePoint(0x26A0),
       RECYCLE: String.fromCodePoint(0x267B),
       NOTE: String.fromCodePoint(0x1F4DD),
-      PIN: String.fromCodePoint(0x1F4CC),
+      PIN: String.fromCodeCodePoint(0x1F4CC),
       CAMERA: String.fromCodePoint(0x1F4F7),
     };
 
@@ -181,11 +174,7 @@ export const Historico: React.FC = () => {
     toast.success('Abrindo WhatsApp para compartilhar!');
   };
   
-  const deleteRecordWithConfirm = async (id: string, isOwner: boolean) => {
-    if (!isOwner) {
-      toast.error('Você não tem permissão para excluir este registro.');
-      return;
-    }
+  const deleteRecordWithConfirm = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.')) {
       const toastId = toast.loading('Excluindo registro...');
       try {
@@ -198,7 +187,7 @@ export const Historico: React.FC = () => {
     }
   };
 
-  const tableHeaders = ['Data', 'Cliente', 'Motorista', 'Produto', 'Qtd', 'Tipo', 'Motivo', 'Estado', 'Reincidência', 'Status', 'Ações'];
+  const tableHeaders = ['Data', 'Cliente', 'Cidade', 'Vendedor', 'Motorista', 'Produto', 'Qtd', 'Tipo', 'Motivo', 'Estado', 'Reincidência', 'Observação', 'Usuário', 'Status', 'Ações'];
 
   return (
     <div className="space-y-8">
@@ -222,11 +211,12 @@ export const Historico: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-200/50">
               {flattenedRecords.map((flatRecord, index) => {
-                const isOwner = user?.id === flatRecord.parentRecord.usuario_id;
                 return (
                   <tr key={`${flatRecord.parentRecord.id}-${index}`} className="hover:bg-brand-secondary/5">
                     <td className="px-4 py-3 whitespace-nowrap">{new Date(flatRecord.parentRecord.date).toLocaleDateString('pt-BR')}</td>
                     <td className="px-4 py-3 font-medium">{flatRecord.parentRecord.cliente}</td>
+                    <td className="px-4 py-3">{flatRecord.parentRecord.cidade}</td>
+                    <td className="px-4 py-3">{flatRecord.parentRecord.vendedor}</td>
                     <td className="px-4 py-3">{flatRecord.parentRecord.motorista}</td>
                     <td className="px-4 py-3">{flatRecord.produto}</td>
                     <td className="px-4 py-3">{flatRecord.quantidade}</td>
@@ -234,16 +224,18 @@ export const Historico: React.FC = () => {
                     <td className="px-4 py-3">{flatRecord.motivo}</td>
                     <td className="px-4 py-3">{flatRecord.estado || '-'}</td>
                     <td className="px-4 py-3">{flatRecord.reincidencia}</td>
+                    <td className="px-4 py-3 max-w-xs truncate" title={flatRecord.parentRecord.observacao}>{flatRecord.parentRecord.observacao}</td>
+                    <td className="px-4 py-3">{flatRecord.parentRecord.usuario}</td>
                     <td className="px-4 py-3">{getStatusBadge(flatRecord.parentRecord)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-3">
+                        <button onClick={() => setEditingRecord(flatRecord.parentRecord)} className="text-gray-500 hover:text-brand-secondary" title="Editar"><FilePenLine className="h-4 w-4" /></button>
                         <button onClick={() => shareRecord(flatRecord)} className="text-gray-500 hover:text-brand-primary" title="Compartilhar"><Share className="h-4 w-4" /></button>
                         {flatRecord.parentRecord.anexos && flatRecord.parentRecord.anexos.length > 0 && <button onClick={() => setImageModal(flatRecord.parentRecord.anexos)} className="text-gray-500 hover:text-brand-primary" title="Ver Imagens"><Image className="h-4 w-4" /></button>}
                         <button 
-                          onClick={() => deleteRecordWithConfirm(flatRecord.parentRecord.id, isOwner)} 
-                          className={`text-gray-500 ${isOwner ? 'hover:text-red-500' : 'opacity-50 cursor-not-allowed'}`} 
-                          title={isOwner ? 'Excluir' : 'Apenas o criador pode excluir'}
-                          disabled={!isOwner}
+                          onClick={() => deleteRecordWithConfirm(flatRecord.parentRecord.id)} 
+                          className="text-gray-500 hover:text-red-500" 
+                          title="Excluir"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -257,6 +249,15 @@ export const Historico: React.FC = () => {
           {flattenedRecords.length === 0 && <div className="text-center py-12 text-gray-500">Nenhum registro encontrado com os filtros aplicados.</div>}
         </div>
       </div>
+      
+      <AnimatePresence>
+        {editingRecord && (
+          <EditRecordModal
+            record={editingRecord}
+            onClose={() => setEditingRecord(null)}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {imageModal && (

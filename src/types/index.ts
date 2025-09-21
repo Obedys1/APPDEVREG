@@ -17,6 +17,7 @@ export interface DevolutionRecord {
 }
 
 export interface ProductRecord {
+  id?: string;
   codigo: string;
   produto: string;
   familia: string;

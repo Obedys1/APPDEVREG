@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, FileText, History, Plus, Menu, User, LogOut } from 'lucide-react';
+import { BarChart3, FileText, History, Plus, Menu, User, LogOut, FileWarning } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -13,7 +13,8 @@ interface LayoutProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-  { id: 'registros', label: 'Novo Registro', icon: Plus },
+  { id: 'registros', label: 'Registrar Devolução', icon: Plus },
+  { id: 'ocorrencias', label: 'Registrar Ocorrência', icon: FileWarning },
   { id: 'historico', label: 'Histórico', icon: History },
   { id: 'relatorios', label: 'Relatórios', icon: FileText },
 ];

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Download, FileText, MessageSquare, Image as ImageIcon } from 'lucide-react';
+import { Download, FileText, MessageSquare, Image as ImageIcon, BarChart2, Package, Users, AlertTriangle } from 'lucide-react';
 import { FilterPanel } from './FilterPanel';
 import { useDevolutions } from '../hooks/useDevolutions';
 import { FilterState, DevolutionRecord } from '../types';
@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 
 const ActionCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
   <motion.div 
@@ -28,6 +29,19 @@ const ActionButton: React.FC<{ onClick: () => void; children: React.ReactNode; c
   </button>
 );
 
+const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string | number; subtitle?: string; className?: string }> = ({ icon, title, value, subtitle, className }) => (
+  <div className={`bg-brand-surface rounded-2xl shadow-lg p-5 flex items-start gap-4 ${className}`}>
+    <div className="bg-brand-primary/10 p-3 rounded-lg">
+      {icon}
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-xs font-medium text-brand-text-muted">{title}</p>
+      <p className="text-xl font-bold text-brand-primary break-words" title={String(value)}>{value}</p>
+      {subtitle && <p className="text-xs text-brand-text-muted">{subtitle}</p>}
+    </div>
+  </div>
+);
+
 export const Relatorios: React.FC = () => {
   const { records, filterRecords } = useDevolutions();
   const [filters, setFilters] = useState<FilterState>({
@@ -37,6 +51,47 @@ export const Relatorios: React.FC = () => {
 
   const filteredRecords = useMemo(() => filterRecords(filters), [records, filters, filterRecords]);
   const hasData = filteredRecords.length > 0;
+
+  const summaryStats = useMemo(() => {
+    if (!hasData) return null;
+    const totalQuantity = filteredRecords.reduce((sum, record) => sum + record.produtos.reduce((prodSum, p) => prodSum + p.quantidade, 0), 0);
+    
+    const getTopItems = (key: 'motivo' | 'cliente' | 'produto', n: number) => {
+        const counts: Record<string, number> = {};
+        if (key === 'produto') {
+            filteredRecords.forEach(r => r.produtos.forEach(p => {
+                counts[p.produto] = (counts[p.produto] || 0) + p.quantidade;
+            }));
+        } else { // motivo or cliente
+            let items: string[] = [];
+            if (key === 'motivo') {
+                items = filteredRecords.flatMap(r => r.produtos.map(p => p.motivo));
+            } else { // cliente
+                items = filteredRecords.map(r => r.cliente);
+            }
+            items.forEach(item => {
+                if(item) counts[item] = (counts[item] || 0) + 1;
+            });
+        }
+        return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, value]) => ({ name, value }));
+    };
+
+    const statusCounts = filteredRecords.reduce((acc, record) => {
+        acc[record.status] = (acc[record.status] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+
+    const statusData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+
+    return {
+        totalRecords: filteredRecords.length,
+        totalQuantity: totalQuantity.toLocaleString('pt-BR'),
+        topMotives: getTopItems('motivo', 3),
+        topClients: getTopItems('cliente', 3),
+        topProducts: getTopItems('produto', 3),
+        statusData,
+    };
+  }, [filteredRecords, hasData]);
 
   const clearFilters = () => setFilters({ 
     search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '',
@@ -516,6 +571,35 @@ export const Relatorios: React.FC = () => {
     <div className="space-y-8">
       <h1 className="text-4xl font-bold text-brand-primary">Relatórios e Exportação</h1>
       <FilterPanel filters={filters} onFiltersChange={setFilters} onClearFilters={clearFilters} />
+      
+      {summaryStats && (
+        <div className="bg-brand-surface rounded-2xl shadow-lg p-6">
+          <h3 className="text-lg font-semibold text-brand-primary mb-4">
+            Resumo dos Dados ({summaryStats.totalRecords} registros encontrados)
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard icon={<BarChart2 className="h-6 w-6 text-brand-primary" />} title="Total Registros" value={summaryStats.totalRecords} />
+            <StatCard icon={<Package className="h-6 w-6 text-brand-secondary" />} title="Qtd. Total Itens" value={summaryStats.totalQuantity} />
+            <div className="md:col-span-2 lg:col-span-2 bg-brand-surface rounded-2xl shadow-lg p-5">
+                <h4 className="text-sm font-semibold text-brand-primary mb-2">Devoluções por Status</h4>
+                <ResponsiveContainer width="100%" height={150}>
+                    <BarChart data={summaryStats.statusData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" hide />
+                        <Tooltip cursor={{fill: 'transparent'}} />
+                        <Bar dataKey="value" fill="#013D28" barSize={20}>
+                            <LabelList dataKey="name" position="insideLeft" style={{ fill: 'white' }} />
+                            <LabelList dataKey="value" position="right" />
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
+            </div>
+            <StatCard icon={<AlertTriangle className="h-6 w-6 text-brand-accent" />} title="Top Motivo" value={summaryStats.topMotives[0]?.name || '-'} subtitle={`${summaryStats.topMotives[0]?.value || 0} ocorr.`} />
+            <StatCard icon={<Users className="h-6 w-6 text-brand-primary" />} title="Top Cliente" value={summaryStats.topClients[0]?.name || '-'} subtitle={`${summaryStats.topClients[0]?.value || 0} dev.`} />
+            <StatCard icon={<Package className="h-6 w-6 text-brand-secondary" />} title="Top Produto (Qtd)" value={summaryStats.topProducts[0]?.name || '-'} subtitle={`${summaryStats.topProducts[0]?.value.toLocaleString('pt-BR') || 0} qtd.`} />
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <ActionCard title="Exportar PDF" icon={<FileText className="h-6 w-6 text-brand-accent" />}>
@@ -535,15 +619,6 @@ export const Relatorios: React.FC = () => {
           <ActionButton onClick={generateWhatsAppGeneral} disabled={!hasData} className="bg-green-600/10 text-green-700 hover:bg-green-600/20">Resumo Geral</ActionButton>
           <ActionButton onClick={generateWhatsAppClienteProdutoMotivo} disabled={!hasData} className="bg-green-600/10 text-green-700 hover:bg-green-600/20">Resumo Cliente x Produto</ActionButton>
         </ActionCard>
-      </div>
-
-      <div className="bg-brand-surface rounded-2xl shadow-lg p-6">
-        <h3 className="text-lg font-semibold text-brand-primary mb-4">
-          Resumo dos Dados ({filteredRecords.length} registros encontrados)
-        </h3>
-        <p className="text-sm text-brand-text-muted">
-          Utilize os filtros acima para refinar sua busca e depois use os botões de ação para gerar relatórios, exportar dados ou compartilhar resumos.
-        </p>
       </div>
     </div>
   );
