@@ -51,13 +51,14 @@ const ImageItem: React.FC<{ url: string; index: number }> = ({ url, index }) => 
 };
 
 export const Historico: React.FC = () => {
-  const { records, updateRecord, deleteRecord, filterRecords } = useDevolutions();
+  const { records, updateRecord, deleteRecord, deleteMultipleRecords, filterRecords } = useDevolutions();
   const [filters, setFilters] = useState<FilterState>({
     search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '',
     familia: '', grupo: '', vendedor: '', rede: '', cidade: '', uf: ''
   });
   const [imageModal, setImageModal] = useState<string[] | null>(null);
   const [editingRecord, setEditingRecord] = useState<DevolutionRecord | null>(null);
+  const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
 
   const filteredRecords = useMemo(() => filterRecords(filters), [records, filters, filterRecords]);
 
@@ -125,18 +126,10 @@ export const Historico: React.FC = () => {
 
   const generateWhatsAppMessage = (record: DevolutionRecord, product: ProductRecord) => {
     const EMOJI = {
-      LOOP: String.fromCodePoint(0x1F504),
-      ID: String.fromCodePoint(0x1F194),
-      DATE: String.fromCodePoint(0x1F4C5),
-      LOCATION: String.fromCodePoint(0x1F4CD),
-      TRUCK: String.fromCodePoint(0x1F69A),
-      PACKAGE: String.fromCodePoint(0x1F4E6),
-      RULER: String.fromCodePoint(0x1F4CF),
-      WARNING: String.fromCodePoint(0x26A0),
-      RECYCLE: String.fromCodePoint(0x267B),
-      NOTE: String.fromCodePoint(0x1F4DD),
-      PIN: String.fromCodePoint(0x1F4CC),
-      CAMERA: String.fromCodePoint(0x1F4F7),
+      LOOP: String.fromCodePoint(0x1F504), ID: String.fromCodePoint(0x1F194), DATE: String.fromCodePoint(0x1F4C5),
+      LOCATION: String.fromCodePoint(0x1F4CD), TRUCK: String.fromCodePoint(0x1F69A), PACKAGE: String.fromCodePoint(0x1F4E6),
+      RULER: String.fromCodePoint(0x1F4CF), WARNING: String.fromCodePoint(0x26A0), RECYCLE: String.fromCodePoint(0x267B),
+      NOTE: String.fromCodePoint(0x1F4DD), PIN: String.fromCodePoint(0x1F4CC), CAMERA: String.fromCodePoint(0x1F4F7),
     };
 
     let message = `${EMOJI.LOOP} *DETALHE DA DEVOLUÇÃO* ${EMOJI.LOOP}\n\n`;
@@ -154,15 +147,11 @@ export const Historico: React.FC = () => {
     
     if (record.anexos && record.anexos.length > 0) {
       message += `*${EMOJI.CAMERA} Evidências Anexadas:*\n`;
-      record.anexos.forEach((url, index) => {
-        message += `Anexo ${index + 1}: ${url}\n`;
-      });
+      record.anexos.forEach((url, index) => { message += `Anexo ${index + 1}: ${url}\n`; });
       message += '\n';
     }
 
-    if (record.observacao) {
-      message += `*${EMOJI.NOTE} Observação Geral:*\n_${record.observacao}_\n\n`;
-    }
+    if (record.observacao) { message += `*${EMOJI.NOTE} Observação Geral:*\n_${record.observacao}_\n\n`; }
     message += `*${EMOJI.PIN} Status Atual:* ${record.status}\n`;
     return message;
   };
@@ -187,60 +176,122 @@ export const Historico: React.FC = () => {
     }
   };
 
+  const handleSelectRecord = (id: string) => {
+    setSelectedRecords(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedRecords.size === filteredRecords.length) {
+      setSelectedRecords(new Set());
+    } else {
+      setSelectedRecords(new Set(filteredRecords.map(r => r.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedRecords.size === 0) {
+      toast.error('Nenhum registro selecionado.');
+      return;
+    }
+    if (window.confirm(`Tem certeza que deseja excluir ${selectedRecords.size} registro(s)?`)) {
+      const toastId = toast.loading(`Excluindo ${selectedRecords.size} registro(s)...`);
+      try {
+        await deleteMultipleRecords(Array.from(selectedRecords));
+        toast.success('Registros excluídos com sucesso!', { id: toastId });
+        setSelectedRecords(new Set());
+      } catch (error: any) {
+        toast.error(`Falha ao excluir registros: ${error.message}`, { id: toastId });
+      }
+    }
+  };
+  
+  const uniqueParentRecords = useMemo(() => {
+    const parentIds = new Set<string>();
+    return flattenedRecords.map(fr => fr.parentRecord).filter(record => {
+      if (parentIds.has(record.id)) {
+        return false;
+      }
+      parentIds.add(record.id);
+      return true;
+    });
+  }, [flattenedRecords]);
+
   const tableHeaders = ['Data', 'Cliente', 'Cidade', 'Vendedor', 'Motorista', 'Produto', 'Qtd', 'Tipo', 'Motivo', 'Estado', 'Reincidência', 'Observação', 'Usuário', 'Status', 'Ações'];
 
   return (
     <div className="space-y-8">
       <h1 className="text-4xl font-bold text-brand-primary">Histórico de devoluções</h1>
-      <FilterPanel filters={filters} onFiltersChange={setFilters} onClearFilters={clearFilters} />
+      <FilterPanel filters={filters} onFiltersChange={setFilters} onClearFilters={clearFilters} moduleType="devolucao" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <StatCard icon={<ClipboardList className="h-6 w-6" />} title="Qtd. de Itens Devolvidos" value={stats.totalItens} />
         <StatCard icon={<PackageX className="h-6 w-6" />} title="Qtd. Total Devolvida (un/kg)" value={stats.totalQuantidade} />
       </div>
 
+      <AnimatePresence>
+        {selectedRecords.size > 0 && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="bg-brand-primary/10 p-4 rounded-lg flex items-center justify-between">
+            <span className="text-sm font-medium text-brand-primary">{selectedRecords.size} registro(s) selecionado(s)</span>
+            <button onClick={handleDeleteSelected} className="flex items-center gap-2 px-3 py-1.5 text-xs bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
+              <Trash2 className="h-4 w-4" /> Excluir Selecionados
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="bg-brand-surface rounded-2xl shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-brand-primary/5">
               <tr>
-                {tableHeaders.map(h => (
-                  <th key={h} className="px-4 py-4 text-left font-semibold text-brand-primary uppercase tracking-wider whitespace-nowrap">{h}</th>
-                ))}
+                <th className="px-4 py-4 text-left"><input type="checkbox" onChange={handleSelectAll} checked={selectedRecords.size > 0 && selectedRecords.size === uniqueParentRecords.length} className="form-checkbox h-4 w-4 text-brand-secondary rounded border-gray-300 focus:ring-brand-secondary" /></th>
+                {tableHeaders.map(h => (<th key={h} className="px-4 py-4 text-left font-semibold text-brand-primary uppercase tracking-wider whitespace-nowrap">{h}</th>))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200/50">
               {flattenedRecords.map((flatRecord, index) => {
+                const isFirstProductOfRecord = index === 0 || flatRecord.parentRecord.id !== flattenedRecords[index - 1].parentRecord.id;
+                const rowSpan = isFirstProductOfRecord ? flatRecord.parentRecord.produtos.length : 1;
+                
                 return (
-                  <tr key={`${flatRecord.parentRecord.id}-${index}`} className="hover:bg-brand-secondary/5">
-                    <td className="px-4 py-3 whitespace-nowrap">{new Date(flatRecord.parentRecord.date).toLocaleDateString('pt-BR')}</td>
-                    <td className="px-4 py-3 font-medium">{flatRecord.parentRecord.cliente}</td>
-                    <td className="px-4 py-3">{flatRecord.parentRecord.cidade}</td>
-                    <td className="px-4 py-3">{flatRecord.parentRecord.vendedor}</td>
-                    <td className="px-4 py-3">{flatRecord.parentRecord.motorista}</td>
+                  <tr key={`${flatRecord.parentRecord.id}-${flatRecord.id || index}`} className={`hover:bg-brand-secondary/5 ${selectedRecords.has(flatRecord.parentRecord.id) ? 'bg-brand-secondary/10' : ''}`}>
+                    {isFirstProductOfRecord && (
+                      <td className="px-4 py-3 align-top" rowSpan={rowSpan}><input type="checkbox" checked={selectedRecords.has(flatRecord.parentRecord.id)} onChange={() => handleSelectRecord(flatRecord.parentRecord.id)} className="form-checkbox h-4 w-4 text-brand-secondary rounded border-gray-300 focus:ring-brand-secondary" /></td>
+                    )}
+                    {isFirstProductOfRecord && <td className="px-4 py-3 whitespace-nowrap align-top" rowSpan={rowSpan}>{new Date(flatRecord.parentRecord.date).toLocaleDateString('pt-BR')}</td>}
+                    {isFirstProductOfRecord && <td className="px-4 py-3 font-medium align-top" rowSpan={rowSpan}>{flatRecord.parentRecord.cliente}</td>}
+                    {isFirstProductOfRecord && <td className="px-4 py-3 align-top" rowSpan={rowSpan}>{flatRecord.parentRecord.cidade}</td>}
+                    {isFirstProductOfRecord && <td className="px-4 py-3 align-top" rowSpan={rowSpan}>{flatRecord.parentRecord.vendedor}</td>}
+                    {isFirstProductOfRecord && <td className="px-4 py-3 align-top" rowSpan={rowSpan}>{flatRecord.parentRecord.motorista}</td>}
+                    
                     <td className="px-4 py-3">{flatRecord.produto}</td>
                     <td className="px-4 py-3">{flatRecord.quantidade}</td>
                     <td className="px-4 py-3">{flatRecord.tipo}</td>
                     <td className="px-4 py-3">{flatRecord.motivo}</td>
                     <td className="px-4 py-3">{flatRecord.estado || '-'}</td>
                     <td className="px-4 py-3">{flatRecord.reincidencia}</td>
-                    <td className="px-4 py-3 max-w-xs truncate" title={flatRecord.parentRecord.observacao}>{flatRecord.parentRecord.observacao}</td>
-                    <td className="px-4 py-3">{flatRecord.parentRecord.usuario}</td>
-                    <td className="px-4 py-3">{getStatusBadge(flatRecord.parentRecord)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-3">
-                        <button onClick={() => setEditingRecord(flatRecord.parentRecord)} className="text-gray-500 hover:text-brand-secondary" title="Editar"><FilePenLine className="h-4 w-4" /></button>
-                        <button onClick={() => shareRecord(flatRecord)} className="text-gray-500 hover:text-brand-primary" title="Compartilhar"><Share className="h-4 w-4" /></button>
-                        {flatRecord.parentRecord.anexos && flatRecord.parentRecord.anexos.length > 0 && <button onClick={() => setImageModal(flatRecord.parentRecord.anexos)} className="text-gray-500 hover:text-brand-primary" title="Ver Imagens"><Image className="h-4 w-4" /></button>}
-                        <button 
-                          onClick={() => deleteRecordWithConfirm(flatRecord.parentRecord.id)} 
-                          className="text-gray-500 hover:text-red-500" 
-                          title="Excluir"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+
+                    {isFirstProductOfRecord && <td className="px-4 py-3 max-w-xs truncate align-top" rowSpan={rowSpan} title={flatRecord.parentRecord.observacao}>{flatRecord.parentRecord.observacao}</td>}
+                    {isFirstProductOfRecord && <td className="px-4 py-3 align-top" rowSpan={rowSpan}>{flatRecord.parentRecord.usuario}</td>}
+                    {isFirstProductOfRecord && <td className="px-4 py-3 align-top" rowSpan={rowSpan}>{getStatusBadge(flatRecord.parentRecord)}</td>}
+                    {isFirstProductOfRecord && (
+                      <td className="px-4 py-3 align-top" rowSpan={rowSpan}>
+                        <div className="flex gap-3">
+                          <button onClick={() => setEditingRecord(flatRecord.parentRecord)} className="text-gray-500 hover:text-brand-secondary" title="Editar"><FilePenLine className="h-4 w-4" /></button>
+                          <button onClick={() => shareRecord(flatRecord)} className="text-gray-500 hover:text-brand-primary" title="Compartilhar"><Share className="h-4 w-4" /></button>
+                          {flatRecord.parentRecord.anexos && flatRecord.parentRecord.anexos.length > 0 && <button onClick={() => setImageModal(flatRecord.parentRecord.anexos)} className="text-gray-500 hover:text-brand-primary" title="Ver Imagens"><Image className="h-4 w-4" /></button>}
+                          <button onClick={() => deleteRecordWithConfirm(flatRecord.parentRecord.id)} className="text-gray-500 hover:text-red-500" title="Excluir"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 )
               })}

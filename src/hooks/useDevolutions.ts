@@ -255,6 +255,15 @@ export const useDevolutions = () => {
     if (error) throw error;
     await fetchRecords();
   };
+  
+  const deleteMultipleRecords = async (ids: string[]) => {
+    const { error } = await supabase
+      .from('devolucoes')
+      .delete()
+      .in('id', ids);
+    if (error) throw error;
+    await fetchRecords();
+  };
 
   const filterRecords = useCallback((filters: FilterState) => {
     let filtered = [...records];
@@ -318,7 +327,7 @@ export const useDevolutions = () => {
     if (filters.estado) filtered = filtered.filter(r => r.produtos.some(p => p.estado === filters.estado));
     if (filters.reincidencia) filtered = filtered.filter(r => r.produtos.some(p => p.reincidencia === filters.reincidencia));
 
-    return filtered;
+    return filtered.sort((a, b) => parseISO(b.created_at).getTime() - parseISO(a.created_at).getTime());
   }, [records]);
 
   return {
@@ -328,6 +337,7 @@ export const useDevolutions = () => {
     saveRecord,
     updateRecord,
     deleteRecord,
+    deleteMultipleRecords,
     filterRecords,
   };
 };

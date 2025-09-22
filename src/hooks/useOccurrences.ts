@@ -58,7 +58,7 @@ export const useOccurrences = () => {
       })) as OccurrenceRecord[];
 
       setOccurrences(formattedData);
-    } catch (error: any) {
+    } catch (error: any) => {
       console.error("Error fetching occurrences:", error);
       toast.error(`Erro ao buscar ocorrências: ${error.message}`);
     } finally {
@@ -97,6 +97,36 @@ export const useOccurrences = () => {
     return finalRecord;
   };
   
+  const updateOccurrence = async (id: string, updates: Partial<Omit<OccurrenceRecord, 'id' | 'usuario_id' | 'created_at' | 'usuario'>>) => {
+    if (!user) throw new Error("Usuário não autenticado.");
+
+    const { error } = await supabase
+      .from('ocorrencias')
+      .update(updates)
+      .eq('id', id);
+    
+    if (error) throw error;
+    await fetchOccurrences();
+  };
+
+  const deleteOccurrence = async (id: string) => {
+    const { error } = await supabase
+      .from('ocorrencias')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    await fetchOccurrences();
+  };
+
+  const deleteMultipleOccurrences = async (ids: string[]) => {
+    const { error } = await supabase
+      .from('ocorrencias')
+      .delete()
+      .in('id', ids);
+    if (error) throw error;
+    await fetchOccurrences();
+  };
+
   const filterOccurrences = useCallback((filters: FilterState) => {
     let filtered = [...occurrences];
 
@@ -154,7 +184,7 @@ export const useOccurrences = () => {
     if (filters.motivo_ocorrencia) filtered = filtered.filter(r => r.motivo_ocorrencia === filters.motivo_ocorrencia);
     if (filters.impactos) filtered = filtered.filter(r => r.impactos === filters.impactos);
 
-    return filtered;
+    return filtered.sort((a, b) => parseISO(b.created_at).getTime() - parseISO(a.created_at).getTime());
   }, [occurrences]);
 
   return {
@@ -162,6 +192,9 @@ export const useOccurrences = () => {
     loading,
     fetchOccurrences,
     saveOccurrence,
+    updateOccurrence,
+    deleteOccurrence,
+    deleteMultipleOccurrences,
     filterOccurrences,
   };
 };
