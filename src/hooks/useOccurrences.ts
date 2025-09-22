@@ -58,7 +58,7 @@ export const useOccurrences = () => {
       })) as OccurrenceRecord[];
 
       setOccurrences(formattedData);
-    } catch (error: any) => {
+    } catch (error: any) {
       console.error("Error fetching occurrences:", error);
       toast.error(`Erro ao buscar ocorrências: ${error.message}`);
     } finally {
