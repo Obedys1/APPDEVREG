@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
+import { LOGO_URL } from '../config';
 
 export const Login: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -38,11 +39,11 @@ export const Login: React.FC = () => {
         className="w-full max-w-md bg-brand-surface rounded-2xl shadow-2xl p-8 space-y-6"
       >
         <div className="text-center">
-          <img src="https://i.ibb.co/67X3xfSV/gdm-devolucoes-logo.png" alt="GDM Logo" className="mx-auto h-24" />
+          <img src={LOGO_URL} alt="GDM Logo" className="mx-auto h-24" />
           <h2 className="mt-4 text-2xl font-bold text-brand-primary">
-            {isLogin ? 'Acessar Sistema' : 'Criar Conta'}
+            {isLogin ? 'Acessar sistema' : 'Criar conta'}
           </h2>
-          <p className="text-brand-text-muted">GDM - Registro de Devoluções</p>
+          <p className="text-brand-text-muted">GDM - Registro de Devoluções e Ocorrências</p>
         </div>
         <form className="space-y-6" onSubmit={handleAuth}>
           <div className="space-y-2">

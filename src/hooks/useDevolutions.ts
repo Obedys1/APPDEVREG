@@ -11,6 +11,14 @@ import {
   startOfYear, endOfYear, subYears 
 } from 'date-fns';
 
+const sanitizeFileName = (fileName: string) => {
+  return fileName
+    .normalize('NFD') // Decompose accented characters
+    .replace(/[\u0300-\u036f]/g, '') // Remove diacritical marks
+    .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace invalid characters with underscore
+    .replace(/\s+/g, '_'); // Replace spaces with underscore
+};
+
 export const useDevolutions = () => {
   const { user } = useAuth();
   const [records, setRecords] = useState<DevolutionRecord[]>([]);
@@ -23,7 +31,7 @@ export const useDevolutions = () => {
     };
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: devolucoesData, error: devolucoesError } = await supabase
         .from('devolucoes')
         .select(`
           id,
@@ -50,24 +58,46 @@ export const useDevolutions = () => {
             motivo,
             estado,
             reincidencia
-          ),
-          profiles ( email )
+          )
         `)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      
-      const formattedData = data.map((d: any) => ({
+      if (devolucoesError) throw devolucoesError;
+      if (!devolucoesData) {
+        setRecords([]);
+        setLoading(false);
+        return;
+      }
+
+      const userIds = [...new Set(devolucoesData.map(d => d.usuario_id).filter(id => id))];
+      let profilesMap = new Map<string, string>();
+
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .in('id', userIds);
+
+        if (profilesError) {
+          console.error("Error fetching profiles:", profilesError.message);
+          toast.error(`Erro ao buscar emails dos usuários.`);
+        } else if (profilesData) {
+          profilesMap = new Map(profilesData.map(p => [p.id, p.email]));
+        }
+      }
+
+      const formattedData = devolucoesData.map((d: any) => ({
         ...d,
+        date: d.date,
         produtos: d.produtos_devolvidos || [],
         anexos: d.anexos_urls || [],
-        usuario: d.profiles?.email || d.usuario_id,
+        usuario: profilesMap.get(d.usuario_id) || d.usuario_id,
         editHistory: [],
       })) as DevolutionRecord[];
 
       setRecords(formattedData);
     } catch (error: any) {
-      console.error("Error fetching records:", error.message);
+      console.error("Error fetching records:", error);
       toast.error(`Erro ao buscar registros: ${error.message}`);
     } finally {
       setLoading(false);
@@ -78,12 +108,13 @@ export const useDevolutions = () => {
     fetchRecords();
   }, [fetchRecords]);
 
-  const saveRecord = async (record: Omit<DevolutionRecord, 'id' | 'usuario' | 'editHistory' | 'anexos'> & { anexos: File[] }): Promise<DevolutionRecord> => {
+  const saveRecord = async (record: Omit<DevolutionRecord, 'id' | 'usuario' | 'editHistory' | 'anexos' | 'created_at' | 'usuario_id'> & { anexos: File[] }): Promise<DevolutionRecord> => {
     if (!user) throw new Error("Usuário não autenticado.");
     
     const anexoUrls: string[] = [];
     for (const file of record.anexos) {
-      const filePath = `${user.id}/${Date.now()}-${file.name}`;
+      const sanitizedFileName = sanitizeFileName(file.name);
+      const filePath = `${user.id}/${Date.now()}-${sanitizedFileName}`;
       const { error: uploadError } = await supabase.storage
         .from('anexos_devolucoes')
         .upload(filePath, file);
@@ -135,6 +166,7 @@ export const useDevolutions = () => {
     const finalRecord: DevolutionRecord = {
       id: devolutionData.id,
       usuario_id: user.id,
+      created_at: devolutionData.created_at,
       date: record.date,
       cliente: record.cliente,
       vendedor: record.vendedor,
@@ -156,14 +188,13 @@ export const useDevolutions = () => {
   const updateRecord = async (id: string, updates: Partial<Omit<DevolutionRecord, 'produtos' | 'anexos'>> & { produtos?: ProductRecord[], anexos?: (File | string)[] }) => {
     if (!user) throw new Error("Usuário não autenticado.");
 
-    // Separate files from URLs
     const newFiles = updates.anexos?.filter(a => a instanceof File) as File[] || [];
     const existingUrls = updates.anexos?.filter(a => typeof a === 'string') as string[] || [];
     
-    // Upload new files
     const newAnexoUrls: string[] = [];
     for (const file of newFiles) {
-        const filePath = `${user.id}/${Date.now()}-${file.name}`;
+        const sanitizedFileName = sanitizeFileName(file.name);
+        const filePath = `${user.id}/${Date.now()}-${sanitizedFileName}`;
         const { error: uploadError } = await supabase.storage.from('anexos_devolucoes').upload(filePath, file);
         if (uploadError) throw uploadError;
         const { data: { publicUrl } } = supabase.storage.from('anexos_devolucoes').getPublicUrl(filePath);
@@ -171,7 +202,6 @@ export const useDevolutions = () => {
     }
     const finalAnexos = [...existingUrls, ...newAnexoUrls];
 
-    // Update the main devolution record
     const { produtos, anexos, ...mainUpdates } = updates;
     const { error: mainError } = await supabase
         .from('devolucoes')
@@ -180,10 +210,9 @@ export const useDevolutions = () => {
 
     if (mainError) throw mainError;
 
-    // Handle product updates with upsert
     if (produtos) {
         const produtosParaUpsert = produtos.map(p => ({
-            id: p.id, // Must exist for upsert to work on updates
+            id: p.id,
             devolution_id: id,
             codigo: p.codigo,
             produto: p.produto,
@@ -196,9 +225,8 @@ export const useDevolutions = () => {
             reincidencia: p.reincidencia
         }));
 
-        // Delete products that are no longer in the list
         const productsToDelete = records.find(r => r.id === id)?.produtos
-            .filter(oldProd => !produtosParaUpsert.some(newProd => newProd.id === oldProd.id))
+            .filter(oldProd => oldProd.id && !produtosParaUpsert.some(newProd => newProd.id === oldProd.id))
             .map(p => p.id);
 
         if (productsToDelete && productsToDelete.length > 0) {
@@ -209,7 +237,6 @@ export const useDevolutions = () => {
             if (deleteError) console.error("Error deleting old products:", deleteError);
         }
 
-        // Upsert new and existing products
         const { error: productsError } = await supabase
             .from('produtos_devolvidos')
             .upsert(produtosParaUpsert, { onConflict: 'id' });
@@ -238,67 +265,15 @@ export const useDevolutions = () => {
     if (filters.period && filters.period !== '') {
         const now = new Date();
         switch (filters.period) {
-            case 'hoje':
-                startDate = startOfDay(now);
-                endDate = endOfDay(now);
-                break;
-            case 'semana_atual':
-                startDate = startOfWeek(now, { weekStartsOn: 1 });
-                endDate = endOfWeek(now, { weekStartsOn: 1 });
-                break;
-            case 'semana_anterior':
-                const prevWeek = subWeeks(now, 1);
-                startDate = startOfWeek(prevWeek, { weekStartsOn: 1 });
-                endDate = endOfWeek(prevWeek, { weekStartsOn: 1 });
-                break;
-            case 'mes_atual':
-                startDate = startOfMonth(now);
-                endDate = endOfMonth(now);
-                break;
-            case 'mes_anterior':
-                const prevMonth = subMonths(now, 1);
-                startDate = startOfMonth(prevMonth);
-                endDate = endOfMonth(prevMonth);
-                break;
-            case 'trimestre_atual':
-                startDate = startOfQuarter(now);
-                endDate = endOfQuarter(now);
-                break;
-            case 'trimestre_anterior':
-                const prevQuarter = subQuarters(now, 1);
-                startDate = startOfQuarter(prevQuarter);
-                endDate = endOfQuarter(prevQuarter);
-                break;
-            case 'semestre_atual':
-                const currentMonth = now.getMonth();
-                if (currentMonth < 6) {
-                    startDate = startOfYear(now);
-                    endDate = endOfMonth(new Date(now.getFullYear(), 5, 1));
-                } else {
-                    startDate = startOfMonth(new Date(now.getFullYear(), 6, 1));
-                    endDate = endOfYear(now);
-                }
-                break;
-            case 'semestre_anterior':
-                 const currentMonthSem = now.getMonth();
-                 if (currentMonthSem < 6) {
-                    const lastYear = subYears(now, 1);
-                    startDate = startOfMonth(new Date(lastYear.getFullYear(), 6, 1));
-                    endDate = endOfYear(lastYear);
-                 } else {
-                    startDate = startOfYear(now);
-                    endDate = endOfMonth(new Date(now.getFullYear(), 5, 1));
-                 }
-                break;
-            case 'ano_atual':
-                startDate = startOfYear(now);
-                endDate = endOfYear(now);
-                break;
-            case 'ano_anterior':
-                const lastYear = subYears(now, 1);
-                startDate = startOfYear(lastYear);
-                endDate = endOfYear(lastYear);
-                break;
+            case 'hoje': startDate = startOfDay(now); endDate = endOfDay(now); break;
+            case 'semana_atual': startDate = startOfWeek(now, { weekStartsOn: 1 }); endDate = endOfWeek(now, { weekStartsOn: 1 }); break;
+            case 'semana_anterior': const pw = subWeeks(now, 1); startDate = startOfWeek(pw, { weekStartsOn: 1 }); endDate = endOfWeek(pw, { weekStartsOn: 1 }); break;
+            case 'mes_atual': startDate = startOfMonth(now); endDate = endOfMonth(now); break;
+            case 'mes_anterior': const pm = subMonths(now, 1); startDate = startOfMonth(pm); endDate = endOfMonth(pm); break;
+            case 'trimestre_atual': startDate = startOfQuarter(now); endDate = endOfQuarter(now); break;
+            case 'trimestre_anterior': const pq = subQuarters(now, 1); startDate = startOfQuarter(pq); endDate = endOfQuarter(pq); break;
+            case 'ano_atual': startDate = startOfYear(now); endDate = endOfYear(now); break;
+            case 'ano_anterior': const py = subYears(now, 1); startDate = startOfYear(py); endDate = endOfYear(py); break;
         }
     } else {
         if (filters.startDate) startDate = startOfDay(parseISO(filters.startDate));
@@ -309,15 +284,11 @@ export const useDevolutions = () => {
         filtered = filtered.filter(record => {
             try {
                 const recordDate = parseISO(record.date);
-                if (startDate && endDate) {
-                    return isWithinInterval(recordDate, { start: startDate, end: endDate });
-                }
+                if (startDate && endDate) return isWithinInterval(recordDate, { start: startDate, end: endDate });
                 if (startDate) return recordDate >= startDate;
                 if (endDate) return recordDate <= endDate;
                 return true;
-            } catch (e) {
-                return false;
-            }
+            } catch (e) { return false; }
         });
     }
 

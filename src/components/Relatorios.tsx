@@ -1,15 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Download, FileText, MessageSquare, Image as ImageIcon, BarChart2, Package, Users, AlertTriangle } from 'lucide-react';
+import { Download, FileText, MessageSquare, Image as ImageIcon, BarChart2, Package, Users, AlertTriangle, MapPin, Globe, Box, Building, UserCheck } from 'lucide-react';
 import { FilterPanel } from './FilterPanel';
 import { useDevolutions } from '../hooks/useDevolutions';
 import { FilterState, DevolutionRecord } from '../types';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+import { generateDetalhadoPDF, generateProdutoMotivoEstadoPDF, generateClienteProdutoMotivoPDF, generateGeralDevolucoesPDF } from '../lib/pdfGenerators';
 
 const ActionCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
   <motion.div 
@@ -29,595 +28,217 @@ const ActionButton: React.FC<{ onClick: () => void; children: React.ReactNode; c
   </button>
 );
 
-const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string | number; subtitle?: string; className?: string }> = ({ icon, title, value, subtitle, className }) => (
-  <div className={`bg-brand-surface rounded-2xl shadow-lg p-5 flex items-start gap-4 ${className}`}>
-    <div className="bg-brand-primary/10 p-3 rounded-lg">
+const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string | number; subtitle?: string; }> = ({ icon, title, value, subtitle }) => (
+  <div className="bg-brand-surface rounded-xl shadow-lg p-4 flex items-start gap-3">
+    <div className="bg-brand-primary/10 p-2.5 rounded-md">
       {icon}
     </div>
     <div className="flex-1 min-w-0">
-      <p className="text-xs font-medium text-brand-text-muted">{title}</p>
-      <p className="text-xl font-bold text-brand-primary break-words" title={String(value)}>{value}</p>
+      <p className="text-xs font-medium text-brand-text-muted capitalize">{title}</p>
+      <p className="text-lg font-bold text-brand-primary break-words" title={String(value)}>{value}</p>
       {subtitle && <p className="text-xs text-brand-text-muted">{subtitle}</p>}
     </div>
   </div>
 );
 
 export const Relatorios: React.FC = () => {
-  const { records, filterRecords } = useDevolutions();
+  const { records: devolucoes, filterRecords } = useDevolutions();
+  const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '',
     familia: '', grupo: '', vendedor: '', rede: '', cidade: '', uf: ''
   });
 
-  const filteredRecords = useMemo(() => filterRecords(filters), [records, filters, filterRecords]);
-  const hasData = filteredRecords.length > 0;
+  const filteredDevolucoes = useMemo(() => filterRecords(filters), [devolucoes, filters, filterRecords]);
+  const hasData = filteredDevolucoes.length > 0;
 
   const summaryStats = useMemo(() => {
     if (!hasData) return null;
-    const totalQuantity = filteredRecords.reduce((sum, record) => sum + record.produtos.reduce((prodSum, p) => prodSum + p.quantidade, 0), 0);
-    
-    const getTopItems = (key: 'motivo' | 'cliente' | 'produto', n: number) => {
+
+    const getTopItem = (key: 'uf' | 'cidade' | 'vendedor' | 'rede' | 'motivo' | 'cliente' | 'produto' | 'familia' | 'grupo' | 'estado', countBy: 'occurrence' | 'quantity' = 'occurrence') => {
         const counts: Record<string, number> = {};
-        if (key === 'produto') {
-            filteredRecords.forEach(r => r.produtos.forEach(p => {
-                counts[p.produto] = (counts[p.produto] || 0) + p.quantidade;
-            }));
-        } else { // motivo or cliente
-            let items: string[] = [];
-            if (key === 'motivo') {
-                items = filteredRecords.flatMap(r => r.produtos.map(p => p.motivo));
-            } else { // cliente
-                items = filteredRecords.map(r => r.cliente);
+        
+        filteredDevolucoes.forEach(record => {
+            if (['uf', 'cidade', 'vendedor', 'rede', 'cliente'].includes(key)) {
+                const itemKey = (record as any)[key];
+                if (itemKey) counts[itemKey] = (counts[itemKey] || 0) + 1;
+            } else if (['motivo', 'estado', 'familia', 'grupo', 'produto'].includes(key)) {
+                record.produtos.forEach(p => {
+                    const itemKey = (p as any)[key];
+                    if (itemKey) {
+                        counts[itemKey] = (counts[itemKey] || 0) + (countBy === 'quantity' ? p.quantidade : 1);
+                    }
+                });
             }
-            items.forEach(item => {
-                if(item) counts[item] = (counts[item] || 0) + 1;
-            });
-        }
-        return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, value]) => ({ name, value }));
+        });
+
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        return sorted.length > 0 ? { name: sorted[0][0], value: sorted[0][1] } : null;
     };
 
-    const statusCounts = filteredRecords.reduce((acc, record) => {
-        acc[record.status] = (acc[record.status] || 0) + 1;
-        return acc;
-    }, {} as Record<string, number>);
-
-    const statusData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+    const totalQuantity = filteredDevolucoes.reduce((sum, record) => sum + record.produtos.reduce((prodSum, p) => prodSum + p.quantidade, 0), 0);
 
     return {
-        totalRecords: filteredRecords.length,
+        totalRecords: filteredDevolucoes.length,
         totalQuantity: totalQuantity.toLocaleString('pt-BR'),
-        topMotives: getTopItems('motivo', 3),
-        topClients: getTopItems('cliente', 3),
-        topProducts: getTopItems('produto', 3),
-        statusData,
+        topMotives: getTopItem('motivo'),
+        topClients: getTopItem('cliente'),
+        topProducts: getTopItem('produto', 'quantity'),
+        topUF: getTopItem('uf'),
+        topCidade: getTopItem('cidade'),
+        topFamilia: getTopItem('familia'),
+        topVendedor: getTopItem('vendedor'),
+        topRede: getTopItem('rede'),
+        topGrupo: getTopItem('grupo'),
+        topEstado: getTopItem('estado'),
     };
-  }, [filteredRecords, hasData]);
-
+  }, [filteredDevolucoes, hasData]);
+  
   const clearFilters = () => setFilters({ 
     search: '', startDate: '', endDate: '', period: '', motivo: '', estado: '', produto: '', cliente: '', reincidencia: '',
     familia: '', grupo: '', vendedor: '', rede: '', cidade: '', uf: ''
   });
 
-  // --- PDF Helper Functions ---
-  const addHeader = (doc: jsPDF, title: string) => {
-    const logoUrl = 'https://i.ibb.co/67X3xfSV/gdm-devolucoes-logo.png';
-    doc.addImage(logoUrl, 'PNG', 14, 12, 25, 25);
-    
-    doc.setFontSize(22);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor('#013D28');
-    doc.text(title, doc.internal.pageSize.getWidth() / 2, 25, { align: 'center' });
-
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor('#666');
-    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
-    
-    doc.setDrawColor('#F9A03F');
-    doc.setLineWidth(1);
-    doc.line(14, 40, doc.internal.pageSize.getWidth() - 14, 40);
-  };
-
-  const addFooter = (doc: jsPDF) => {
-    const pageCount = doc.internal.getNumberOfPages();
-    doc.setFontSize(8);
-    doc.setTextColor('#666');
-    for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+  const handlePdfExport = async (generator: (records: DevolutionRecord[], stats: any) => Promise<void>, type: string) => {
+    if (!hasData) {
+      toast.error('Nenhum dado para exportar.');
+      return;
     }
-  };
-
-  const drawStatCard = (doc: jsPDF, x: number, y: number, width: number, height: number, title: string, value: string) => {
-    doc.setFillColor('#FBF5EB');
-    doc.roundedRect(x, y, width, height, 3, 3, 'F');
-    doc.setFontSize(10);
-    doc.setTextColor('#666');
-    doc.text(title, x + 5, y + 7);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor('#013D28');
-    doc.text(value, x + 5, y + 16);
-    doc.setFont('helvetica', 'normal');
-  };
-
-  const getImageAsBase64 = (url: string): Promise<string | null> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'Anonymous';
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0);
-        const dataURL = canvas.toDataURL('image/jpeg');
-        resolve(dataURL);
-      };
-      img.onerror = () => {
-        console.error(`Falha ao carregar imagem: ${url}`);
-        resolve(null);
-      };
-      img.src = url;
-    });
-  };
-
-  // --- PDF Generation Logic ---
-  const generatePDFGeneral = () => {
-    if (!hasData) { toast.error('Nenhum dado para gerar o relatório.'); return; }
-    const toastId = toast.loading('Gerando Relatório Geral...');
-
+    setIsGenerating(type);
+    const toastId = toast.loading(`Gerando PDF: ${type}...`);
     try {
-        const doc = new jsPDF('p', 'mm', 'a4');
-        let lastY = 50;
-        
-        addHeader(doc, 'Relatório Geral');
-
-        const totalRegistros = filteredRecords.length;
-        const totalQuantidade = filteredRecords.reduce((sum, rec) => sum + rec.produtos.reduce((pSum, p) => pSum + p.quantidade, 0), 0);
-        
-        const byClient: Record<string, { count: number; quantity: number }> = {};
-        const byProduct: Record<string, number> = {};
-        const byMotive: Record<string, number> = {};
-        const byMonth: Record<string, number> = {};
-
-        filteredRecords.forEach(record => {
-            const clientKey = record.cliente;
-            byClient[clientKey] = byClient[clientKey] || { count: 0, quantity: 0 };
-            byClient[clientKey].count++;
-
-            const monthYear = format(parseISO(record.date), 'MM/yyyy', { locale: ptBR });
-            byMonth[monthYear] = (byMonth[monthYear] || 0) + 1;
-
-            record.produtos.forEach(p => {
-                byClient[clientKey].quantity += p.quantidade;
-                byProduct[p.produto] = (byProduct[p.produto] || 0) + p.quantidade;
-                byMotive[p.motivo] = (byMotive[p.motivo] || 0) + 1;
-            });
-        });
-
-        const toSortedArray = (data: Record<string, any>, key: 'count' | 'quantity' | null = null) => {
-            return Object.entries(data).sort((a, b) => {
-                const valA = key ? a[1][key] : a[1];
-                const valB = key ? b[1][key] : b[1];
-                return valB - valA;
-            });
-        };
-
-        drawStatCard(doc, 14, lastY, 88, 20, 'Total de Registros', String(totalRegistros));
-        drawStatCard(doc, 108, lastY, 88, 20, 'Total de Itens (Qtd)', totalQuantidade.toLocaleString('pt-BR'));
-        lastY += 30;
-
-        const addSection = (title: string, head: any[], body: any[][]) => {
-            if (lastY > 240) { doc.addPage(); lastY = 20; }
-            doc.setFontSize(16);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor('#013D28');
-            doc.text(title, 14, lastY);
-            lastY += 8;
-
-            autoTable(doc, {
-                head: head,
-                body: body,
-                startY: lastY,
-                theme: 'striped',
-                headStyles: { fillColor: '#013D28', textColor: '#fff' },
-                didDrawPage: (data) => { lastY = data.cursor?.y || 20; }
-            });
-            lastY = (doc as any).lastAutoTable.finalY + 15;
-        }
-
-        const clientBody = toSortedArray(byClient, 'count').map(([name, data]) => [name, data.count, `${((data.count / totalRegistros) * 100).toFixed(2)}%`]);
-        addSection('Devoluções por Cliente', [['Cliente', 'Registros', '% do Total']], clientBody);
-
-        const productBody = toSortedArray(byProduct).map(([name, qty]) => [name, qty.toLocaleString('pt-BR'), `${((qty / totalQuantidade) * 100).toFixed(2)}%`]);
-        addSection('Devoluções por Produto', [['Produto', 'Qtd. Devolvida', '% do Total']], productBody);
-        
-        const totalMotives = Object.values(byMotive).reduce((a, b) => a + b, 0);
-        const motiveBody = toSortedArray(byMotive).map(([name, count]) => [name, count, `${((count / totalMotives) * 100).toFixed(2)}%`]);
-        addSection('Devoluções por Motivo', [['Motivo', 'Ocorrências', '% do Total']], motiveBody);
-
-        const monthBody = toSortedArray(byMonth).map(([name, count]) => [name, count]);
-        addSection('Devoluções por Mês', [['Mês/Ano', 'Registros']], monthBody);
-
-        addFooter(doc);
-        doc.save('relatorio_geral_gdm.pdf');
-        toast.success('Relatório gerado com sucesso!', { id: toastId });
-
+      await generator(filteredDevolucoes, summaryStats);
+      toast.success('PDF gerado com sucesso!', { id: toastId });
     } catch (error) {
-        console.error("PDF Generation Error:", error);
-        toast.error('Ocorreu um erro ao gerar o PDF.', { id: toastId });
+      console.error(`Error generating ${type} PDF:`, error);
+      toast.error(`Falha ao gerar PDF: ${(error as Error).message}`, { id: toastId });
+    } finally {
+      setIsGenerating(null);
     }
   };
 
-  const generatePDFClienteProdutoMotivo = () => {
-    if (!hasData) { toast.error('Nenhum dado para gerar o relatório.'); return; }
-    const toastId = toast.loading('Gerando Relatório...');
-
-    try {
-        const doc = new jsPDF('p', 'mm', 'a4');
-        let lastY = 50;
-
-        addHeader(doc, 'Relatório: Cliente x Produto');
-
-        const groupedData: Record<string, { totalQuantity: number; products: Record<string, { totalQuantity: number; motives: Record<string, number> }> }> = {};
-        
-        filteredRecords.forEach(rec => {
-            if (!groupedData[rec.cliente]) {
-                groupedData[rec.cliente] = { totalQuantity: 0, products: {} };
-            }
-            rec.produtos.forEach(p => {
-                groupedData[rec.cliente].totalQuantity += p.quantidade;
-                if (!groupedData[rec.cliente].products[p.produto]) {
-                    groupedData[rec.cliente].products[p.produto] = { totalQuantity: 0, motives: {} };
-                }
-                groupedData[rec.cliente].products[p.produto].totalQuantity += p.quantidade;
-                groupedData[rec.cliente].products[p.produto].motives[p.motivo] = (groupedData[rec.cliente].products[p.produto].motives[p.motivo] || 0) + p.quantidade;
-            });
-        });
-
-        drawStatCard(doc, 14, lastY, 88, 20, 'Total de Clientes', String(Object.keys(groupedData).length));
-        lastY += 30;
-
-        for (const [cliente, data] of Object.entries(groupedData)) {
-            if (lastY > 220) { doc.addPage(); lastY = 20; }
-            
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor('#013D28');
-            doc.text(`Cliente: ${cliente}`, 14, lastY);
-            
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor('#333');
-            doc.text(`Total Devolvido: ${data.totalQuantity.toLocaleString('pt-BR')}`, 14, lastY + 5);
-            lastY += 12;
-
-            const tableBody = Object.entries(data.products).flatMap(([produto, prodData]) => 
-                Object.entries(prodData.motives).map(([motivo, qtd], index) => 
-                    index === 0 ? [produto, motivo, qtd.toLocaleString('pt-BR')] : ['', motivo, qtd.toLocaleString('pt-BR')]
-                )
-            );
-
-            autoTable(doc, {
-                head: [['Produto', 'Motivo', 'Quantidade']],
-                body: tableBody,
-                startY: lastY,
-                theme: 'grid',
-                headStyles: { fillColor: '#F5F5F5', textColor: '#333' },
-                didDrawPage: (data) => { lastY = data.cursor?.y || 20; }
-            });
-            lastY = (doc as any).lastAutoTable.finalY + 15;
-        }
-
-        addFooter(doc);
-        doc.save('relatorio_cliente_produto_motivo.pdf');
-        toast.success('Relatório gerado!', { id: toastId });
-    } catch (error) {
-        console.error("PDF Generation Error:", error);
-        toast.error('Ocorreu um erro ao gerar o PDF.', { id: toastId });
-    }
-  };
-
-  const generatePDFProdutoMotivoEstado = () => {
-    if (!hasData) { toast.error('Nenhum dado para gerar o relatório.'); return; }
-    const toastId = toast.loading('Gerando Relatório...');
-
-     try {
-        const doc = new jsPDF('p', 'mm', 'a4');
-        let lastY = 50;
-
-        addHeader(doc, 'Relatório: Produto x Motivo x Estado');
-
-        const groupedData: Record<string, { totalQuantity: number; motives: Record<string, { totalQuantity: number; states: Record<string, number> }> }> = {};
-        
-        filteredRecords.forEach(rec => {
-            rec.produtos.forEach(p => {
-                if (!groupedData[p.produto]) {
-                    groupedData[p.produto] = { totalQuantity: 0, motives: {} };
-                }
-                groupedData[p.produto].totalQuantity += p.quantidade;
-
-                if (!groupedData[p.produto].motives[p.motivo]) {
-                    groupedData[p.produto].motives[p.motivo] = { totalQuantity: 0, states: {} };
-                }
-                groupedData[p.produto].motives[p.motivo].totalQuantity += p.quantidade;
-                
-                const estado = p.estado || 'N/A';
-                groupedData[p.produto].motives[p.motivo].states[estado] = (groupedData[p.produto].motives[p.motivo].states[estado] || 0) + p.quantidade;
-            });
-        });
-
-        drawStatCard(doc, 14, lastY, 88, 20, 'Total de Produtos Únicos', String(Object.keys(groupedData).length));
-        lastY += 30;
-
-        for (const [produto, data] of Object.entries(groupedData)) {
-            if (lastY > 220) { doc.addPage(); lastY = 20; }
-            
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor('#013D28');
-            doc.text(`Produto: ${produto}`, 14, lastY);
-            
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor('#333');
-            doc.text(`Total Devolvido: ${data.totalQuantity.toLocaleString('pt-BR')}`, 14, lastY + 5);
-            lastY += 12;
-
-            const tableBody = Object.entries(data.motives).flatMap(([motivo, motivoData]) => 
-                Object.entries(motivoData.states).map(([estado, qtd], index) => 
-                    index === 0 ? [motivo, estado, qtd.toLocaleString('pt-BR')] : ['', estado, qtd.toLocaleString('pt-BR')]
-                )
-            );
-
-            autoTable(doc, {
-                head: [['Motivo', 'Estado', 'Quantidade']],
-                body: tableBody,
-                startY: lastY,
-                theme: 'grid',
-                headStyles: { fillColor: '#F5F5F5', textColor: '#333' },
-                didDrawPage: (data) => { lastY = data.cursor?.y || 20; }
-            });
-            lastY = (doc as any).lastAutoTable.finalY + 15;
-        }
-
-        addFooter(doc);
-        doc.save('relatorio_produto_motivo_estado.pdf');
-        toast.success('Relatório gerado!', { id: toastId });
-    } catch (error) {
-        console.error("PDF Generation Error:", error);
-        toast.error('Ocorreu um erro ao gerar o PDF.', { id: toastId });
-    }
-  };
-
-  const generatePDFDetalhado = async () => {
-    if (!hasData) { toast.error('Nenhum dado para gerar o relatório.'); return; }
-    const toastId = toast.loading('Gerando Relatório Detalhado (pode levar um tempo)...');
-
-    try {
-        const doc = new jsPDF('p', 'mm', 'a4');
-        let lastY = 50;
-
-        addHeader(doc, 'Relatório Detalhado de Devoluções');
-        
-        for (const record of filteredRecords) {
-            if (lastY > 220) { doc.addPage(); lastY = 20; addHeader(doc, 'Relatório Detalhado de Devoluções'); }
-
-            doc.setFillColor('#F5F5F5');
-            doc.rect(14, lastY, 182, 10, 'F');
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor('#013D28');
-            doc.text(`Registro ID: ${String(record.id).substring(0, 8)} - Data: ${new Date(record.date).toLocaleDateString('pt-BR')}`, 16, lastY + 7);
-            lastY += 15;
-
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor('#333');
-            doc.text(`Cliente: ${record.cliente}`, 16, lastY);
-            doc.text(`Motorista: ${record.motorista}`, 100, lastY);
-            lastY += 5;
-            doc.text(`Vendedor: ${record.vendedor}`, 16, lastY);
-            doc.text(`Rede: ${record.rede}`, 100, lastY);
-            lastY += 10;
-
-            const productBody = record.produtos.map(p => [p.produto, p.quantidade, p.tipo, p.motivo, p.estado || 'N/A']);
-            autoTable(doc, {
-                head: [['Produto', 'Qtd', 'Tipo', 'Motivo', 'Estado']],
-                body: productBody,
-                startY: lastY,
-                theme: 'grid',
-                headStyles: { fillColor: '#F9A03F', textColor: '#fff', fontSize: 9 },
-                bodyStyles: { fontSize: 8 },
-                didDrawPage: (data) => { lastY = data.cursor?.y || 20; }
-            });
-            lastY = (doc as any).lastAutoTable.finalY + 5;
-
-            if (record.anexos && record.anexos.length > 0) {
-                if (lastY > 230) { doc.addPage(); lastY = 20; }
-                doc.setFontSize(10);
-                doc.setFont('helvetica', 'bold');
-                doc.text('Evidências:', 14, lastY);
-                lastY += 5;
-
-                const imagePromises = record.anexos.map(url => getImageAsBase64(url));
-                const base64Images = await Promise.all(imagePromises);
-                
-                const imgWidth = 58;
-                const imgHeight = 43.5;
-                const gap = 4;
-                let currentX = 14;
-
-                for (const base64Image of base64Images) {
-                    if (lastY + imgHeight > 280) {
-                        doc.addPage();
-                        lastY = 20;
-                        currentX = 14;
-                    }
-                    if (base64Image) {
-                        doc.addImage(base64Image, 'JPEG', currentX, lastY, imgWidth, imgHeight);
-                    } else {
-                        doc.setFillColor('#EEEEEE');
-                        doc.rect(currentX, lastY, imgWidth, imgHeight, 'F');
-                        doc.setFontSize(8);
-                        doc.setTextColor('#999');
-                        doc.text('Falha ao carregar imagem', currentX + imgWidth / 2, lastY + imgHeight / 2, { align: 'center' });
-                    }
-                    currentX += imgWidth + gap;
-                    if (currentX + imgWidth > 196) {
-                        currentX = 14;
-                        lastY += imgHeight + gap;
-                    }
-                }
-                lastY = currentX === 14 ? lastY : lastY + imgHeight + gap;
-            }
-            lastY += 5;
-            doc.setDrawColor('#DDDDDD');
-            doc.line(14, lastY, 196, lastY);
-            lastY += 5;
-        }
-
-        addFooter(doc);
-        doc.save('relatorio_detalhado_gdm.pdf');
-        toast.success('Relatório detalhado gerado!', { id: toastId });
-    } catch (error) {
-        console.error("PDF Generation Error:", error);
-        toast.error('Ocorreu um erro ao gerar o PDF detalhado.', { id: toastId });
-    }
-  };
-
-
-  const exportToExcel = () => {
+  const exportToXLSX = () => {
     if (!hasData) { toast.error('Nenhum dado para exportar.'); return; }
-    const toastId = toast.loading('Exportando para CSV...');
+    const toastId = toast.loading('Exportando para XLSX...');
 
-    const headers = ["ID Registro", "Data", "Cliente", "Vendedor", "Rede", "Cidade", "UF", "Motorista", "Status", "Observação Geral", "Código Produto", "Produto", "Família", "Grupo", "Quantidade", "Tipo", "Motivo", "Estado", "Reincidência"];
-    
-    const rows = filteredRecords.flatMap(record => 
-      record.produtos.map(p => [
-        record.id,
-        new Date(record.date).toLocaleDateString('pt-BR'),
-        `"${record.cliente.replace(/"/g, '""')}"`,
-        `"${record.vendedor.replace(/"/g, '""')}"`,
-        `"${record.rede.replace(/"/g, '""')}"`,
-        `"${record.cidade.replace(/"/g, '""')}"`,
-        record.uf,
-        `"${record.motorista.replace(/"/g, '""')}"`,
-        record.status,
-        `"${(record.observacao || '').replace(/"/g, '""')}"`,
-        p.codigo,
-        `"${p.produto.replace(/"/g, '""')}"`,
-        `"${p.familia.replace(/"/g, '""')}"`,
-        `"${p.grupo.replace(/"/g, '""')}"`,
-        p.quantidade,
-        p.tipo,
-        `"${p.motivo.replace(/"/g, '""')}"`,
-        `"${(p.estado || '').replace(/"/g, '""')}"`,
-        p.reincidencia
-      ].join(','))
+    const devolucoesFlat = filteredDevolucoes.flatMap(record => 
+      record.produtos.map(p => ({
+        'ID Registro': record.id,
+        'Data Registro': format(parseISO(record.created_at), 'dd/MM/yyyy HH:mm:ss'),
+        'Data Ocorrência': format(parseISO(record.date), 'dd/MM/yyyy'),
+        'Status': record.status,
+        'Cliente': record.cliente,
+        'Vendedor': record.vendedor,
+        'Rede': record.rede,
+        'Cidade': record.cidade,
+        'UF': record.uf,
+        'Motorista': record.motorista,
+        'Observação Geral': record.observacao,
+        'Registrado Por': record.usuario,
+        'ID Produto': p.id,
+        'Código Produto': p.codigo,
+        'Produto': p.produto,
+        'Família': p.familia,
+        'Grupo': p.grupo,
+        'Quantidade': p.quantidade,
+        'Tipo Unidade': p.tipo,
+        'Motivo Devolução': p.motivo,
+        'Estado Produto': p.estado,
+        'Reincidência': p.reincidencia,
+        'Anexos': record.anexos.join(', '),
+      }))
     );
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(','), ...rows].join('\n');
+    const ws = XLSX.utils.json_to_sheet(devolucoesFlat);
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "relatorio_devolucoes.csv");
-    document.body.appendChild(link);
+    const headerStyle = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "013D28" } } };
+    const range = XLSX.utils.decode_range(ws['!ref']!);
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+        const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws[addr]) continue;
+        ws[addr].s = headerStyle;
+    }
 
-    link.click();
-    document.body.removeChild(link);
-    toast.success('CSV exportado com sucesso!', { id: toastId });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Relatorio Devolucoes');
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const dataBlob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    saveAs(dataBlob, `relatorio_devolucoes_gdm_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+    toast.success('XLSX exportado com sucesso!', { id: toastId });
   };
-
-  const openWhatsApp = (message: string) => {
+  
+  const handleWhatsAppSummary = () => {
+    if (!summaryStats) {
+        toast.error('Não há dados de resumo para compartilhar.');
+        return;
+    }
+    const { totalRecords, totalQuantity, topMotives, topClients, topProducts, topUF, topVendedor, topRede } = summaryStats;
+    let message = `📊 *Resumo Geral de Devoluções* 📊\n\n`;
+    message += `*Total de Registros:* ${totalRecords}\n`;
+    message += `*Qtd. Total de Itens:* ${totalQuantity}\n\n`;
+    message += `*🏆 Top Motivo:* ${topMotives?.name || '-'} (${topMotives?.value || 0} ocorr.)\n`;
+    message += `*🏆 Top Cliente:* ${topClients?.name || '-'} (${topClients?.value || 0} dev.)\n`;
+    message += `*🏆 Top Produto (Qtd):* ${topProducts?.name || '-'} (${topProducts?.value.toLocaleString('pt-BR') || 0} qtd.)\n`;
+    message += `*🏆 Top Vendedor:* ${topVendedor?.name || '-'} (${topVendedor?.value || 0} dev.)\n`;
+    message += `*🏆 Top Rede:* ${topRede?.name || '-'} (${topRede?.value || 0} dev.)\n`;
+    message += `*🏆 Top UF:* ${topUF?.name || '-'} (${topUF?.value || 0} dev.)\n`;
+    
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
-    toast.success('Resumo pronto para envio no WhatsApp!');
-  }
+  };
 
-  const generateWhatsAppGeneral = () => {
-    if (!hasData) { toast.error('Nenhum dado para gerar o resumo.'); return; }
-    const EMOJI_CHART = String.fromCodePoint(0x1F4CA);
-    let message = `${EMOJI_CHART} *Resumo Geral de Devoluções*\n\n`;
-    message += `*Total de Registros:* ${filteredRecords.length}\n`;
-    const totalQty = filteredRecords.reduce((sum, rec) => sum + rec.produtos.reduce((pSum, p) => pSum + p.quantidade, 0), 0);
-    message += `*Total de Itens Devolvidos:* ${totalQty.toLocaleString('pt-BR')}\n\n`;
-    message += '*(Com base nos filtros aplicados)*';
-    openWhatsApp(message);
-  };
-  
-  const generateWhatsAppClienteProdutoMotivo = () => {
-    if (!hasData) { toast.error('Nenhum dado para gerar o resumo.'); return; }
-    const EMOJI_USER = String.fromCodePoint(0x1F464);
-    let message = `${EMOJI_USER} *Resumo: Cliente x Produto x Motivo*\n\n`;
-    const limitedRecords = filteredRecords.slice(0, 5); // Limit to avoid huge messages
-    limitedRecords.forEach(rec => {
-      message += `*Cliente:* ${rec.cliente}\n`;
-      rec.produtos.forEach(p => {
-        message += `  - *Produto:* ${p.produto}\n`;
-        message += `    - *Motivo:* ${p.motivo} | *Qtd:* ${p.quantidade}\n`;
-      });
-      message += '\n';
-    });
-    if(filteredRecords.length > 5) message += `\n... e mais ${filteredRecords.length - 5} registros.\n`;
-    message += '\n*(Com base nos filtros aplicados)*';
-    openWhatsApp(message);
-  };
-  
   return (
     <div className="space-y-8">
-      <h1 className="text-4xl font-bold text-brand-primary">Relatórios e Exportação</h1>
-      <FilterPanel filters={filters} onFiltersChange={setFilters} onClearFilters={clearFilters} />
+      <h1 className="text-4xl font-bold text-brand-primary">Relatórios de devoluções</h1>
+      <FilterPanel filters={filters} onFiltersChange={setFilters} onClearFilters={clearFilters} moduleType="devolucao" />
       
       {summaryStats && (
         <div className="bg-brand-surface rounded-2xl shadow-lg p-6">
           <h3 className="text-lg font-semibold text-brand-primary mb-4">
-            Resumo dos Dados ({summaryStats.totalRecords} registros encontrados)
+            Resumo dos dados ({summaryStats.totalRecords} registros encontrados)
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard icon={<BarChart2 className="h-6 w-6 text-brand-primary" />} title="Total Registros" value={summaryStats.totalRecords} />
-            <StatCard icon={<Package className="h-6 w-6 text-brand-secondary" />} title="Qtd. Total Itens" value={summaryStats.totalQuantity} />
-            <div className="md:col-span-2 lg:col-span-2 bg-brand-surface rounded-2xl shadow-lg p-5">
-                <h4 className="text-sm font-semibold text-brand-primary mb-2">Devoluções por Status</h4>
-                <ResponsiveContainer width="100%" height={150}>
-                    <BarChart data={summaryStats.statusData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                        <XAxis type="number" hide />
-                        <YAxis dataKey="name" type="category" hide />
-                        <Tooltip cursor={{fill: 'transparent'}} />
-                        <Bar dataKey="value" fill="#013D28" barSize={20}>
-                            <LabelList dataKey="name" position="insideLeft" style={{ fill: 'white' }} />
-                            <LabelList dataKey="value" position="right" />
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
-            <StatCard icon={<AlertTriangle className="h-6 w-6 text-brand-accent" />} title="Top Motivo" value={summaryStats.topMotives[0]?.name || '-'} subtitle={`${summaryStats.topMotives[0]?.value || 0} ocorr.`} />
-            <StatCard icon={<Users className="h-6 w-6 text-brand-primary" />} title="Top Cliente" value={summaryStats.topClients[0]?.name || '-'} subtitle={`${summaryStats.topClients[0]?.value || 0} dev.`} />
-            <StatCard icon={<Package className="h-6 w-6 text-brand-secondary" />} title="Top Produto (Qtd)" value={summaryStats.topProducts[0]?.name || '-'} subtitle={`${summaryStats.topProducts[0]?.value.toLocaleString('pt-BR') || 0} qtd.`} />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+            <StatCard icon={<BarChart2 className="h-5 w-5 text-brand-primary" />} title="Total de devoluções" value={summaryStats.totalRecords} />
+            <StatCard icon={<Package className="h-5 w-5 text-brand-secondary" />} title="Qtd. total de itens" value={summaryStats.totalQuantity} />
+            <StatCard icon={<AlertTriangle className="h-5 w-5 text-brand-accent" />} title="Top motivo" value={summaryStats.topMotives?.name || '-'} subtitle={`${summaryStats.topMotives?.value || 0} ocorr.`} />
+            <StatCard icon={<Users className="h-5 w-5 text-brand-primary" />} title="Top cliente" value={summaryStats.topClients?.name || '-'} subtitle={`${summaryStats.topClients?.value || 0} dev.`} />
+            <StatCard icon={<Package className="h-5 w-5 text-brand-secondary" />} title="Top produto (Qtd)" value={summaryStats.topProducts?.name || '-'} subtitle={`${summaryStats.topProducts?.value.toLocaleString('pt-BR') || 0} qtd.`} />
+            <StatCard icon={<Globe className="h-5 w-5 text-brand-primary" />} title="Top UF" value={summaryStats.topUF?.name || '-'} subtitle={`${summaryStats.topUF?.value || 0} dev.`} />
+            <StatCard icon={<MapPin className="h-5 w-5 text-brand-secondary" />} title="Top cidade" value={summaryStats.topCidade?.name || '-'} subtitle={`${summaryStats.topCidade?.value || 0} dev.`} />
+            <StatCard icon={<Box className="h-5 w-5 text-brand-primary" />} title="Top família" value={summaryStats.topFamilia?.name || '-'} subtitle={`${summaryStats.topFamilia?.value || 0} ocorr.`} />
+            <StatCard icon={<UserCheck className="h-5 w-5 text-brand-secondary" />} title="Top vendedor" value={summaryStats.topVendedor?.name || '-'} subtitle={`${summaryStats.topVendedor?.value || 0} dev.`} />
+            <StatCard icon={<Building className="h-5 w-5 text-brand-primary" />} title="Top rede" value={summaryStats.topRede?.name || '-'} subtitle={`${summaryStats.topRede?.value || 0} dev.`} />
+            <StatCard icon={<Box className="h-5 w-5 text-brand-secondary" />} title="Top grupo" value={summaryStats.topGrupo?.name || '-'} subtitle={`${summaryStats.topGrupo?.value || 0} ocorr.`} />
+            <StatCard icon={<AlertTriangle className="h-5 w-5 text-brand-accent" />} title="Top estado" value={summaryStats.topEstado?.name || '-'} subtitle={`${summaryStats.topEstado?.value || 0} ocorr.`} />
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <ActionCard title="Exportar PDF" icon={<FileText className="h-6 w-6 text-brand-accent" />}>
-          <ActionButton onClick={generatePDFGeneral} disabled={!hasData} className="bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20">Relatório Geral</ActionButton>
-          <ActionButton onClick={generatePDFClienteProdutoMotivo} disabled={!hasData} className="bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20">Cliente x Produto x Motivo</ActionButton>
-          <ActionButton onClick={generatePDFProdutoMotivoEstado} disabled={!hasData} className="bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20">Produto x Motivo x Estado</ActionButton>
-          <ActionButton onClick={generatePDFDetalhado} disabled={!hasData} className="bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20">
-            <ImageIcon className="h-4 w-4" /> Relatório Detalhado (c/ Imagens)
+          <ActionButton onClick={() => handlePdfExport(generateGeralDevolucoesPDF, 'Geral')} disabled={!hasData || !!isGenerating} className="bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20">
+            {isGenerating === 'Geral' ? 'Gerando...' : 'Relatório Geral'}
+          </ActionButton>
+          <ActionButton onClick={() => handlePdfExport(generateClienteProdutoMotivoPDF, 'Cliente x Produto')} disabled={!hasData || !!isGenerating} className="bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20">
+            {isGenerating === 'Cliente x Produto' ? 'Gerando...' : 'Cliente x Produto'}
+          </ActionButton>
+           <ActionButton onClick={() => handlePdfExport(generateProdutoMotivoEstadoPDF, 'Produto x Motivo')} disabled={!hasData || !!isGenerating} className="bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20">
+            {isGenerating === 'Produto x Motivo' ? 'Gerando...' : 'Produto x Motivo x Estado'}
+          </ActionButton>
+          <ActionButton onClick={() => handlePdfExport(generateDetalhadoPDF, 'Detalhado')} disabled={!hasData || !!isGenerating} className="bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20">
+            <ImageIcon className="h-4 w-4" /> {isGenerating === 'Detalhado' ? 'Gerando...' : 'Relatório Detalhado'}
           </ActionButton>
         </ActionCard>
 
         <ActionCard title="Exportar Dados" icon={<Download className="h-6 w-6 text-brand-primary" />}>
-          <ActionButton onClick={exportToExcel} disabled={!hasData} className="bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20">Exportar para Excel (CSV)</ActionButton>
+          <ActionButton onClick={exportToXLSX} disabled={!hasData} className="bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20">Exportar para Excel (XLSX)</ActionButton>
         </ActionCard>
 
         <ActionCard title="Enviar via WhatsApp" icon={<MessageSquare className="h-6 w-6 text-green-600" />}>
-          <ActionButton onClick={generateWhatsAppGeneral} disabled={!hasData} className="bg-green-600/10 text-green-700 hover:bg-green-600/20">Resumo Geral</ActionButton>
-          <ActionButton onClick={generateWhatsAppClienteProdutoMotivo} disabled={!hasData} className="bg-green-600/10 text-green-700 hover:bg-green-600/20">Resumo Cliente x Produto</ActionButton>
+          <ActionButton onClick={handleWhatsAppSummary} disabled={!hasData} className="bg-green-600/10 text-green-700 hover:bg-green-600/20">
+            Resumo Geral
+          </ActionButton>
         </ActionCard>
       </div>
     </div>

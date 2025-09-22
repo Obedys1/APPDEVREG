@@ -14,6 +14,27 @@ export interface DevolutionRecord {
   status: 'pendente' | 'em_analise' | 'revisado' | 'finalizado';
   usuario: string;
   editHistory: EditHistory[];
+  created_at: string;
+}
+
+export interface OccurrenceRecord {
+  id: string;
+  usuario_id: string;
+  created_at: string;
+  data: string;
+  cliente: string;
+  motorista: string;
+  vendedor: string;
+  rede: string;
+  cidade: string;
+  uf: string;
+  reincidencia: string;
+  setor_responsavel: string;
+  motivo_ocorrencia: string;
+  resumo_ocorrencia: string;
+  tratativa: string;
+  impactos: string;
+  usuario: string;
 }
 
 export interface ProductRecord {
@@ -40,13 +61,19 @@ export interface FilterState {
   startDate: string;
   endDate: string;
   period: string;
-  motivo: string;
-  estado: string;
-  produto: string;
+  // Devolução
+  motivo?: string;
+  estado?: string;
+  produto?: string;
+  familia?: string;
+  grupo?: string;
+  // Ocorrência
+  setor_responsavel?: string;
+  motivo_ocorrencia?: string;
+  impactos?: string;
+  // Comum
   cliente: string;
   reincidencia: string;
-  familia: string;
-  grupo: string;
   vendedor: string;
   rede: string;
   cidade: string;

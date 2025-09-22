@@ -11,7 +11,6 @@ import { Ocorrencias } from './components/Ocorrencias';
 import { HistoricoOcorrencias } from './components/HistoricoOcorrencias';
 import { RelatoriosOcorrencias } from './components/RelatoriosOcorrencias';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { LOGO_URL } from './config';
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -42,7 +41,7 @@ const AppContent: React.FC = () => {
     return (
       <div className="min-h-screen bg-brand-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <img src={LOGO_URL} alt="GDM Logo" className="h-24 animate-pulse" />
+          <img src="https://i.ibb.co/pPqNDsW/2logo.png" alt="GDM Logo" className="h-24 animate-pulse" />
           <p className="text-brand-primary font-semibold">Carregando...</p>
         </div>
       </div>

@@ -1033,3 +1033,24 @@ export const PERIODOS = [
   { value: 'ano_atual', label: 'Ano Atual' },
   { value: 'ano_anterior', label: 'Ano Anterior' }
 ];
+
+// Novas listas para Ocorrências
+export const SETORES_RESPONSAVEIS = [
+  'Comercial', 'Qualidade', 'Transporte', 'Compras', 'Estoque', 
+  'Expedição', 'Separação', 'Faturamento', 'Cliente', 'Outro (digitar)'
+];
+
+export const MOTIVOS_OCORRENCIA = [
+  'Diferença de preço', 'Divergência de quantidade', 'Sem pedido', 'Erro de digitação',
+  'Produto sem cadastro', 'Sem agendamento', 'Desacordo com o pedido', 'Erro de código',
+  'Atraso na entrega', 'Falha no transporte', 'Falha de roteirização', 'Erro de conferência',
+  'Falha no descarregamento', 'Erro de separação', 'Falha no carregamento', 
+  'Demora recebimento do cliente', 'Indevida', 'Sinistro', 'Loja sem promotor',
+  'Falha no repasse', 'Baixa qualidade', 'Compra não conforme', 'Outro (digitar)'
+];
+
+export const IMPACTOS = [
+  'Cancelamento', 'Refaturamento', 'Devolução parcial', 'Devolução total',
+  'Atraso nas entregas', 'Insatisfação do cliente', 'Falta na entrega',
+  'Entrega devolvida em total', 'Outro (digitar)'
+];

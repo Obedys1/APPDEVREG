@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import toast from 'react-hot-toast';
+import { LOGO_URL } from '../config';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,10 +14,12 @@ interface LayoutProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-  { id: 'registros', label: 'Registrar Devolução', icon: Plus },
-  { id: 'ocorrencias', label: 'Registrar Ocorrência', icon: FileWarning },
-  { id: 'historico', label: 'Histórico', icon: History },
-  { id: 'relatorios', label: 'Relatórios', icon: FileText },
+  { id: 'registros', label: 'Registrar devolução', icon: Plus },
+  { id: 'ocorrencias', label: 'Registrar ocorrência', icon: FileWarning },
+  { id: 'historico-devolucoes', label: 'Histórico devoluções', icon: History },
+  { id: 'historico-ocorrencias', label: 'Histórico ocorrências', icon: History },
+  { id: 'relatorios-devolucoes', label: 'Relatórios devoluções', icon: FileText },
+  { id: 'relatorios-ocorrencias', label: 'Relatórios ocorrências', icon: FileText },
 ];
 
 const sidebarVariants = {
@@ -79,10 +82,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
         initial="closed"
         animate={sidebarOpen ? 'open' : 'closed'}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className="fixed inset-y-0 left-0 z-50 w-64 bg-brand-primary flex flex-col lg:!translate-x-0"
+        className="fixed inset-y-0 left-0 z-50 w-72 bg-brand-primary flex flex-col lg:!translate-x-0"
       >
         <div className="flex items-center justify-center h-24 px-6 flex-shrink-0">
-          <img src="https://i.ibb.co/67X3xfSV/gdm-devolucoes-logo.png" alt="GDM Devoluções Logo" className="h-20" />
+          <img src={LOGO_URL} alt="Grupo Doce Mel Logo" className="h-20" />
         </div>
         <nav className="flex-grow px-4 py-4 space-y-2">
           {menuItems.map(item => <NavItem key={item.id} item={item} />)}
@@ -103,7 +106,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
         </div>
       </motion.div>
 
-      <div className="lg:ml-64 flex flex-col min-h-screen">
+      <div className="lg:ml-72 flex flex-col min-h-screen">
         <div className="sticky top-0 z-30 bg-brand-background/80 backdrop-blur-sm border-b border-black/5">
           <div className="flex items-center justify-between h-20 px-6">
             <button

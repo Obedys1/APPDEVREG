@@ -7,6 +7,15 @@ import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const getSalvadorDateString = () => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+};
+
 export const Registros: React.FC = () => {
     const { saveRecord } = useDevolutions();
     const { user } = useAuth();
@@ -14,7 +23,7 @@ export const Registros: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
     
     const initialFormState = {
-      data: new Date().toISOString().split('T')[0],
+      data: getSalvadorDateString(),
       cliente: '',
       vendedor: '',
       rede: '',
@@ -275,11 +284,11 @@ export const Registros: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-4xl font-bold text-brand-primary">Registrar Devolução</h1>
+      <h1 className="text-4xl font-bold text-brand-primary">Registrar devolução</h1>
       
       <form onSubmit={handleSubmit} className="space-y-8">
         <div className="bg-brand-surface rounded-2xl shadow-lg p-8">
-          <h2 className="text-xl font-semibold text-brand-primary mb-6">Informações Gerais</h2>
+          <h2 className="text-xl font-semibold text-brand-primary mb-6">Informações gerais</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-brand-text-muted mb-2">
@@ -333,7 +342,7 @@ export const Registros: React.FC = () => {
         </div>
 
         <div className="space-y-6">
-          <h2 className="text-xl font-semibold text-brand-primary">Produtos Devolvidos</h2>
+          <h2 className="text-xl font-semibold text-brand-primary">Produtos devolvidos</h2>
           {produtos.map((produto, index) => (
             <motion.div key={index} layout className="bg-brand-surface rounded-2xl shadow-lg p-6 relative">
               {produtos.length > 1 && (
@@ -437,7 +446,7 @@ export const Registros: React.FC = () => {
 
         <button type="submit" disabled={isSaving} className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-brand-secondary text-white rounded-lg hover:bg-opacity-90 transition-all font-bold text-lg shadow-lg disabled:opacity-50">
           <Save className="h-6 w-6" />
-          {isSaving ? 'SALVANDO...' : 'SALVAR E ENVIAR REGISTRO'}
+          {isSaving ? 'SALVANDO...' : 'SALVAR E COMPARTILHAR'}
         </button>
       </form>
 

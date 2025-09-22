@@ -135,7 +135,7 @@ export const Historico: React.FC = () => {
       WARNING: String.fromCodePoint(0x26A0),
       RECYCLE: String.fromCodePoint(0x267B),
       NOTE: String.fromCodePoint(0x1F4DD),
-      PIN: String.fromCodeCodePoint(0x1F4CC),
+      PIN: String.fromCodePoint(0x1F4CC),
       CAMERA: String.fromCodePoint(0x1F4F7),
     };
 
@@ -191,7 +191,7 @@ export const Historico: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-4xl font-bold text-brand-primary">Histórico de Devoluções</h1>
+      <h1 className="text-4xl font-bold text-brand-primary">Histórico de devoluções</h1>
       <FilterPanel filters={filters} onFiltersChange={setFilters} onClearFilters={clearFilters} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
