@@ -1052,5 +1052,5 @@ export const MOTIVOS_OCORRENCIA = [
 export const IMPACTOS = [
   'Cancelamento', 'Refaturamento', 'Devolução parcial', 'Devolução total',
   'Atraso nas entregas', 'Insatisfação do cliente', 'Falta na entrega',
-  'Entrega devolvida em total', 'Outro (digitar)'
+  'Entrega devolvida em total', 'Divergencia no Estoque', 'Outro (digitar)'
 ];
